@@ -1,13 +1,15 @@
-import express, { Router, Response } from 'express';
+import { Router, Response } from 'express';
 import { credentialsService } from '../services/credentials.service';
 import { locationsService } from '../services/locations.service';
+import { tariffsService } from '../services/tariffs.service';
 import { ocpiAuth, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
 // Helper for OCPI response format
 const ocpiResponse = (data: any, statusCode: number, message: string, res: Response) => {
-  res.status(statusCode === 1000 ? 200 : statusCode >= 2000 ? 400 : 200).json({
+  const httpStatus = statusCode === 1000 || statusCode === 1001 ? 200 : statusCode >= 2000 ? 400 : 200;
+  res.status(httpStatus).json({
     data,
     status_code: statusCode,
     status_message: message,
@@ -19,29 +21,15 @@ const ocpiResponse = (data: any, statusCode: number, message: string, res: Respo
 // CREDENTIALS ENDPOINTS
 // ========================================
 
-/**
- * POST /ocpi/2.2.1/credentials
- * Register new eMSP - returns credentials
- */
 router.post('/credentials', async (req: AuthRequest, res: Response) => {
   try {
     const { party_id, country_code, business_details } = req.body;
 
     if (!party_id || !country_code || !business_details?.name) {
-      return ocpiResponse(
-        null,
-        3000,
-        'Missing required fields: party_id, country_code, business_details.name',
-        res
-      );
+      return ocpiResponse(null, 3000, 'Missing required fields: party_id, country_code, business_details.name', res);
     }
 
-    const credentials = await credentialsService.createCredentials(
-      party_id,
-      country_code,
-      business_details
-    );
-
+    const credentials = await credentialsService.createCredentials(party_id, country_code, business_details);
     ocpiResponse(credentials, 1000, 'Credentials created successfully', res);
   } catch (err) {
     console.error('Error creating credentials:', err);
@@ -49,18 +37,12 @@ router.post('/credentials', async (req: AuthRequest, res: Response) => {
   }
 });
 
-/**
- * GET /ocpi/2.2.1/credentials
- * Get current credentials (requires token)
- */
 router.get('/credentials', ocpiAuth, async (req: AuthRequest, res: Response) => {
   try {
     const credentials = await credentialsService.getCredentials(req.token!);
-
     if (!credentials) {
       return ocpiResponse(null, 2004, 'Credentials not found', res);
     }
-
     ocpiResponse(credentials, 1000, 'Credentials retrieved successfully', res);
   } catch (err) {
     console.error('Error getting credentials:', err);
@@ -72,10 +54,6 @@ router.get('/credentials', ocpiAuth, async (req: AuthRequest, res: Response) => 
 // LOCATIONS ENDPOINTS
 // ========================================
 
-/**
- * GET /ocpi/2.2.1/locations
- * List all locations (no auth required for admin access)
- */
 router.get('/locations', async (req: AuthRequest, res: Response) => {
   try {
     const locations = await locationsService.listLocations();
@@ -86,21 +64,13 @@ router.get('/locations', async (req: AuthRequest, res: Response) => {
   }
 });
 
-/**
- * GET /ocpi/2.2.1/locations/:location_id
- * Get specific location (no auth required for admin access)
- */
 router.get('/locations/:location_id', async (req: AuthRequest, res: Response) => {
   try {
-    const location_id = Array.isArray(req.params.location_id) 
-      ? req.params.location_id[0] 
-      : req.params.location_id;
+    const location_id = Array.isArray(req.params.location_id) ? req.params.location_id[0] : req.params.location_id;
     const location = await locationsService.getLocation(location_id);
-
     if (!location) {
       return ocpiResponse(null, 2004, `Location ${location_id} not found`, res);
     }
-
     ocpiResponse(location, 1000, 'Location retrieved successfully', res);
   } catch (err) {
     console.error('Error getting location:', err);
@@ -108,139 +78,253 @@ router.get('/locations/:location_id', async (req: AuthRequest, res: Response) =>
   }
 });
 
-/**
- * POST /ocpi/2.2.1/locations
- * Create new location (admin API)
- */
 router.post('/locations', async (req: AuthRequest, res: Response) => {
   try {
-    const {
-      location_id,
-      type,
-      name,
-      address,
-      city,
-      postal_code,
-      country,
-      latitude,
-      longitude,
-      operator_name,
-    } = req.body;
+    const { location_id, type, name, address, city, postal_code, country, latitude, longitude, operator_name, time_zone, charging_when_closed, facilities } = req.body;
 
     if (!location_id || !address || !city || !postal_code || !country) {
-      return ocpiResponse(
-        null,
-        3000,
-        'Missing required fields',
-        res
-      );
+      return ocpiResponse(null, 3000, 'Missing required fields', res);
     }
-
     if (latitude === undefined || longitude === undefined) {
-      return ocpiResponse(
-        null,
-        3000,
-        'Missing required fields: latitude, longitude',
-        res
-      );
+      return ocpiResponse(null, 3000, 'Missing required fields: latitude, longitude', res);
     }
 
     const location = await locationsService.createLocation({
-      location_id,
-      type,
-      name,
-      address,
-      city,
-      postal_code,
-      country,
-      latitude: parseFloat(latitude),
-      longitude: parseFloat(longitude),
-      operator_name,
+      location_id, type, name, address, city, postal_code, country,
+      latitude: parseFloat(latitude), longitude: parseFloat(longitude),
+      operator_name, time_zone, charging_when_closed, facilities,
     });
 
     ocpiResponse(location, 1001, 'Location created successfully', res);
   } catch (err: any) {
     console.error('Error creating location:', err);
-    if (err.message.includes('duplicate key')) {
+    if (err.message?.includes('duplicate key')) {
       return ocpiResponse(null, 3002, 'Location already exists', res);
     }
     ocpiResponse(null, 2000, 'Internal server error', res);
   }
 });
 
-/**
- * POST /ocpi/2.2.1/locations/:location_id/evses
- * Add EVSE to location
- */
+router.patch('/locations/:location_id', async (req: AuthRequest, res: Response) => {
+  try {
+    const location_id = Array.isArray(req.params.location_id) ? req.params.location_id[0] : req.params.location_id;
+    const location = await locationsService.updateLocation(location_id, req.body);
+    if (!location) {
+      return ocpiResponse(null, 2004, `Location ${location_id} not found`, res);
+    }
+    ocpiResponse(location, 1000, 'Location updated successfully', res);
+  } catch (err) {
+    console.error('Error updating location:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+router.delete('/locations/:location_id', async (req: AuthRequest, res: Response) => {
+  try {
+    const location_id = Array.isArray(req.params.location_id) ? req.params.location_id[0] : req.params.location_id;
+    const deleted = await locationsService.deleteLocation(location_id);
+    if (!deleted) {
+      return ocpiResponse(null, 2004, `Location ${location_id} not found`, res);
+    }
+    ocpiResponse(null, 1000, 'Location deleted successfully', res);
+  } catch (err) {
+    console.error('Error deleting location:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+// ========================================
+// EVSE ENDPOINTS
+// ========================================
+
 router.post('/locations/:location_id/evses', async (req: AuthRequest, res: Response) => {
   try {
-    const location_id = Array.isArray(req.params.location_id) 
-      ? req.params.location_id[0] 
-      : req.params.location_id;
-    const { evse_id, uid, status } = req.body;
+    const location_id = Array.isArray(req.params.location_id) ? req.params.location_id[0] : req.params.location_id;
+    const { evse_id, uid, status, floor_level, physical_reference } = req.body;
 
     if (!evse_id) {
       return ocpiResponse(null, 3000, 'Missing required field: evse_id', res);
     }
 
-    const evse = await locationsService.addEVSE(location_id, {
-      evse_id,
-      uid,
-      status,
-    });
-
+    const evse = await locationsService.addEVSE(location_id, { evse_id, uid, status, floor_level, physical_reference });
     ocpiResponse(evse, 1001, 'EVSE created successfully', res);
   } catch (err: any) {
     console.error('Error adding EVSE:', err);
-    if (err.message.includes('not found')) {
+    if (err.message?.includes('not found')) {
       return ocpiResponse(null, 2004, err.message, res);
     }
     ocpiResponse(null, 2000, 'Internal server error', res);
   }
 });
 
-/**
- * POST /ocpi/2.2.1/locations/:location_id/evses/:evse_id/connectors
- * Add connector to EVSE
- */
-router.post(
-  '/locations/:location_id/evses/:evse_id/connectors',
-  async (req: AuthRequest, res: Response) => {
-    try {
-      const evse_id = Array.isArray(req.params.evse_id) 
-        ? req.params.evse_id[0] 
-        : req.params.evse_id;
-      const { connector_id, standard, format, power_type, voltage, amperage, power_kw } =
-        req.body;
-
-      if (!connector_id || !standard || !format || !power_type || !voltage || !amperage) {
-        return ocpiResponse(
-          null,
-          3000,
-          'Missing required fields: connector_id, standard, format, power_type, voltage, amperage',
-          res
-        );
-      }
-
-      const connector = await locationsService.addConnector(evse_id, {
-        connector_id,
-        standard,
-        format,
-        power_type,
-        voltage: parseInt(voltage),
-        amperage: parseInt(amperage),
-        power_kw,
-      });
-
-      ocpiResponse(connector, 1001, 'Connector created successfully', res);
-    } catch (err: any) {
-      console.error('Error adding connector:', err);
-      if (err.message.includes('not found')) {
-        return ocpiResponse(null, 2004, err.message, res);
-      }
-      ocpiResponse(null, 2000, 'Internal server error', res);
+router.patch('/locations/:location_id/evses/:evse_id', async (req: AuthRequest, res: Response) => {
+  try {
+    const evse_id = Array.isArray(req.params.evse_id) ? req.params.evse_id[0] : req.params.evse_id;
+    const evse = await locationsService.updateEVSE(evse_id, req.body);
+    if (!evse) {
+      return ocpiResponse(null, 2004, `EVSE ${evse_id} not found`, res);
     }
+    ocpiResponse(evse, 1000, 'EVSE updated successfully', res);
+  } catch (err) {
+    console.error('Error updating EVSE:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
   }
-);
+});
+
+router.delete('/locations/:location_id/evses/:evse_id', async (req: AuthRequest, res: Response) => {
+  try {
+    const evse_id = Array.isArray(req.params.evse_id) ? req.params.evse_id[0] : req.params.evse_id;
+    const deleted = await locationsService.deleteEVSE(evse_id);
+    if (!deleted) {
+      return ocpiResponse(null, 2004, `EVSE ${evse_id} not found`, res);
+    }
+    ocpiResponse(null, 1000, 'EVSE deleted successfully', res);
+  } catch (err) {
+    console.error('Error deleting EVSE:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+// ========================================
+// CONNECTOR ENDPOINTS
+// ========================================
+
+router.post('/locations/:location_id/evses/:evse_id/connectors', async (req: AuthRequest, res: Response) => {
+  try {
+    const evse_id = Array.isArray(req.params.evse_id) ? req.params.evse_id[0] : req.params.evse_id;
+    const { connector_id, standard, format, power_type, voltage, amperage, power_kw, tariff_id } = req.body;
+
+    if (!connector_id || !standard || !format || !power_type || !voltage || !amperage) {
+      return ocpiResponse(null, 3000, 'Missing required fields: connector_id, standard, format, power_type, voltage, amperage', res);
+    }
+
+    const connector = await locationsService.addConnector(evse_id, {
+      connector_id, standard, format, power_type,
+      voltage: parseInt(voltage), amperage: parseInt(amperage),
+      power_kw: power_kw ? parseFloat(power_kw) : undefined,
+      tariff_id,
+    });
+
+    ocpiResponse(connector, 1001, 'Connector created successfully', res);
+  } catch (err: any) {
+    console.error('Error adding connector:', err);
+    if (err.message?.includes('not found')) {
+      return ocpiResponse(null, 2004, err.message, res);
+    }
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+router.patch('/locations/:location_id/evses/:evse_id/connectors/:connector_id', async (req: AuthRequest, res: Response) => {
+  try {
+    const evse_id = Array.isArray(req.params.evse_id) ? req.params.evse_id[0] : req.params.evse_id;
+    const connector_id = Array.isArray(req.params.connector_id) ? req.params.connector_id[0] : req.params.connector_id;
+    
+    const connector = await locationsService.updateConnector(evse_id, connector_id, req.body);
+    if (!connector) {
+      return ocpiResponse(null, 2004, `Connector ${connector_id} not found`, res);
+    }
+    ocpiResponse(connector, 1000, 'Connector updated successfully', res);
+  } catch (err) {
+    console.error('Error updating connector:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+router.delete('/locations/:location_id/evses/:evse_id/connectors/:connector_id', async (req: AuthRequest, res: Response) => {
+  try {
+    const evse_id = Array.isArray(req.params.evse_id) ? req.params.evse_id[0] : req.params.evse_id;
+    const connector_id = Array.isArray(req.params.connector_id) ? req.params.connector_id[0] : req.params.connector_id;
+    
+    const deleted = await locationsService.deleteConnector(evse_id, connector_id);
+    if (!deleted) {
+      return ocpiResponse(null, 2004, `Connector ${connector_id} not found`, res);
+    }
+    ocpiResponse(null, 1000, 'Connector deleted successfully', res);
+  } catch (err) {
+    console.error('Error deleting connector:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+// ========================================
+// TARIFF ENDPOINTS
+// ========================================
+
+router.get('/tariffs', async (req: AuthRequest, res: Response) => {
+  try {
+    const tariffs = await tariffsService.listTariffs();
+    ocpiResponse(tariffs, 1000, 'Tariffs retrieved successfully', res);
+  } catch (err) {
+    console.error('Error listing tariffs:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+router.get('/tariffs/:tariff_id', async (req: AuthRequest, res: Response) => {
+  try {
+    const tariff_id = Array.isArray(req.params.tariff_id) ? req.params.tariff_id[0] : req.params.tariff_id;
+    const tariff = await tariffsService.getTariff(tariff_id);
+    if (!tariff) {
+      return ocpiResponse(null, 2004, `Tariff ${tariff_id} not found`, res);
+    }
+    ocpiResponse(tariff, 1000, 'Tariff retrieved successfully', res);
+  } catch (err) {
+    console.error('Error getting tariff:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+router.post('/tariffs', async (req: AuthRequest, res: Response) => {
+  try {
+    const { tariff_id, currency, type, elements, display_text, min_price, max_price } = req.body;
+
+    if (!tariff_id || !currency || !type) {
+      return ocpiResponse(null, 3000, 'Missing required fields: tariff_id, currency, type', res);
+    }
+
+    const tariff = await tariffsService.createTariff({
+      tariff_id, currency, type,
+      elements: elements || [],
+      display_text, min_price, max_price,
+    });
+
+    ocpiResponse(tariff, 1001, 'Tariff created successfully', res);
+  } catch (err: any) {
+    console.error('Error creating tariff:', err);
+    if (err.message?.includes('duplicate key')) {
+      return ocpiResponse(null, 3002, 'Tariff already exists', res);
+    }
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+router.patch('/tariffs/:tariff_id', async (req: AuthRequest, res: Response) => {
+  try {
+    const tariff_id = Array.isArray(req.params.tariff_id) ? req.params.tariff_id[0] : req.params.tariff_id;
+    const tariff = await tariffsService.updateTariff(tariff_id, req.body);
+    if (!tariff) {
+      return ocpiResponse(null, 2004, `Tariff ${tariff_id} not found`, res);
+    }
+    ocpiResponse(tariff, 1000, 'Tariff updated successfully', res);
+  } catch (err) {
+    console.error('Error updating tariff:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+router.delete('/tariffs/:tariff_id', async (req: AuthRequest, res: Response) => {
+  try {
+    const tariff_id = Array.isArray(req.params.tariff_id) ? req.params.tariff_id[0] : req.params.tariff_id;
+    const deleted = await tariffsService.deleteTariff(tariff_id);
+    if (!deleted) {
+      return ocpiResponse(null, 2004, `Tariff ${tariff_id} not found`, res);
+    }
+    ocpiResponse(null, 1000, 'Tariff deleted successfully', res);
+  } catch (err) {
+    console.error('Error deleting tariff:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
 
 export default router;

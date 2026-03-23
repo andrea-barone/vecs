@@ -37,10 +37,38 @@ export const runMigrations = async () => {
         time_zone VARCHAR(50),
         operator_name VARCHAR(255),
         charging_when_closed BOOLEAN DEFAULT FALSE,
+        facilities JSONB,
         last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Add facilities column if missing
+    await pool.query(`
+      ALTER TABLE locations ADD COLUMN IF NOT EXISTS facilities JSONB
+    `).catch(() => {});
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS tariffs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tariff_id VARCHAR(255) NOT NULL UNIQUE,
+        currency VARCHAR(3) NOT NULL,
+        type VARCHAR(50) NOT NULL,
+        display_text TEXT,
+        min_price DECIMAL(10, 4),
+        max_price DECIMAL(10, 4),
+        start_date_time TIMESTAMP,
+        end_date_time TIMESTAMP,
+        elements JSONB NOT NULL DEFAULT '[]',
+        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Add new tariff columns if missing
+    await pool.query(`ALTER TABLE tariffs ADD COLUMN IF NOT EXISTS display_text TEXT`).catch(() => {});
+    await pool.query(`ALTER TABLE tariffs ADD COLUMN IF NOT EXISTS min_price DECIMAL(10, 4)`).catch(() => {});
+    await pool.query(`ALTER TABLE tariffs ADD COLUMN IF NOT EXISTS max_price DECIMAL(10, 4)`).catch(() => {});
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS evses (
@@ -68,11 +96,15 @@ export const runMigrations = async () => {
         amperage INTEGER NOT NULL,
         power_kw DECIMAL(6, 2),
         status VARCHAR(50) NOT NULL DEFAULT 'AVAILABLE',
+        tariff_id VARCHAR(255),
         last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(evse_id, connector_id)
       )
     `);
+
+    // Add tariff_id column if missing
+    await pool.query(`ALTER TABLE connectors ADD COLUMN IF NOT EXISTS tariff_id VARCHAR(255)`).catch(() => {});
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS sessions (
@@ -112,20 +144,6 @@ export const runMigrations = async () => {
         total_cost_excl_vat DECIMAL(10, 2),
         total_cost_incl_vat DECIMAL(10, 2),
         credit BOOLEAN DEFAULT FALSE,
-        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS tariffs (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        tariff_id VARCHAR(255) NOT NULL UNIQUE,
-        currency VARCHAR(3) NOT NULL,
-        type VARCHAR(50) NOT NULL,
-        start_date_time TIMESTAMP,
-        end_date_time TIMESTAMP,
-        elements JSONB NOT NULL,
         last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )

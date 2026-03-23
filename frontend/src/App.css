@@ -801,3 +801,183 @@ body {
   flex-direction: column;
   gap: 0.25rem;
 }
+
+/* Tariff Manager */
+.tariff-manager {
+  margin-top: 1rem;
+}
+
+.tariff-form {
+  margin-bottom: 2rem;
+}
+
+.tariff-form h3 {
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+.tariff-form h4 {
+  margin: 1.5rem 0 0.75rem 0;
+  color: #666;
+  font-size: 0.95rem;
+}
+
+.tariff-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.tariff-card {
+  background: white;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.tariff-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.tariff-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #667eea;
+}
+
+.tariff-type {
+  background: #e0e7ff;
+  color: #4338ca;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.tariff-details {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.tariff-details p {
+  margin: 0.25rem 0;
+}
+
+.price-components {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.price-badge {
+  background: #f0fdf4;
+  color: #15803d;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.tariff-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #eee;
+}
+
+/* Edit Forms */
+.edit-form {
+  background: #f9f9f9;
+  padding: 1rem;
+  border-radius: 6px;
+  margin: 0.5rem 0;
+}
+
+.edit-form-inline {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  background: #f9f9f9;
+  padding: 0.5rem;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.edit-form-inline select,
+.edit-form-inline input {
+  padding: 0.4rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.button-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+/* Location Actions */
+.location-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+  padding: 0.5rem 0;
+  border-top: 1px solid #eee;
+}
+
+/* EVSE Actions */
+.evse-actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.floor {
+  font-size: 0.75rem;
+  color: #888;
+  background: #f0f0f0;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+}
+
+/* Connector Actions */
+.connector-actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+/* Tariff Badge on Connector */
+.tariff-badge {
+  background: #fef3c7;
+  color: #92400e;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+}
+
+/* Danger Button */
+.btn-danger {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.btn-danger:hover {
+  background: #fecaca;
+}
+
+.btn-tiny.btn-danger {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.btn-tiny.btn-danger:hover {
+  background: #fecaca;
+}

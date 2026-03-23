@@ -5,13 +5,22 @@ import { LocationList } from './components/LocationList';
 import { LocationForm } from './components/LocationForm';
 import { EVSEForm } from './components/EVSEForm';
 import { AdminSetup } from './components/AdminSetup';
+import { TariffManager } from './components/TariffManager';
 
 interface Location {
   id: string;
+  type: string;
+  name?: string;
   address: string;
   city: string;
   country: string;
+  postal_code?: string;
+  coordinates?: { latitude: number; longitude: number };
+  operator?: { name: string };
+  time_zone?: string;
+  charging_when_closed?: boolean;
   evses: any[];
+  last_updated?: string;
 }
 
 type AppMode = 'welcome' | 'admin' | 'emsp';
@@ -24,7 +33,7 @@ export function App() {
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'locations' | 'create'>('locations');
+  const [activeTab, setActiveTab] = useState<'locations' | 'create' | 'tariffs'>('locations');
 
   // Use relative paths for API calls (works through nginx proxy in Docker)
   // Falls back to VITE_API_URL for dev server with proxy setup
@@ -182,7 +191,19 @@ export function App() {
                 >
                   ➕ Create
                 </button>
+                <button
+                  className={`tab ${activeTab === 'tariffs' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('tariffs')}
+                >
+                  💰 Tariffs
+                </button>
               </nav>
+
+              {activeTab === 'tariffs' && (
+                <section className="section">
+                  <TariffManager apiBase={API_BASE} />
+                </section>
+              )}
 
               {activeTab === 'locations' && (
                 <section className="section">
