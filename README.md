@@ -1,19 +1,34 @@
 # VECS — Virtual Electric Charging Station Simulator
 
-A virtual OCPI 2.2.1 CPO (Charge Point Operator) for testing eMSP (eMobility Service Provider) integrations.
+A virtual OCPI 2.2.1 CPO (Charge Point Operator) for testing eMSP (eMobility Service Provider) integrations. Includes both a powerful backend API and a beautiful, user-friendly web dashboard.
 
 ## Overview
 
-VECS simulates a complete charging network operator with realistic OCPI endpoints. eMSPs can register, fetch locations, manage sessions, and test their OCPI implementations against a fully-featured virtual CPO.
+VECS simulates a complete charging network operator with realistic OCPI endpoints. eMSPs can:
+- Register and get API credentials
+- Fetch charging locations with real-time data
+- Create and manage EVSEs (charge points)
+- Configure connectors with realistic specifications
+- Test their OCPI implementations against a fully-featured virtual CPO
+
+All through both REST API and an intuitive web interface.
 
 **Status:** MVP with Credentials, Locations, EVSEs, and Connectors implemented.
 
 ## Tech Stack
 
-- **Backend:** Node.js + Express + TypeScript
-- **Database:** PostgreSQL
-- **Standards:** OCPI 2.2.1
-- **Auth:** Bearer token (OCPI spec)
+### Backend
+- Node.js + Express + TypeScript
+- PostgreSQL database
+- OCPI 2.2.1 standard compliant
+- Bearer token authentication
+
+### Frontend
+- React 19 + TypeScript
+- Vite for fast dev/build
+- Modern CSS3 (no framework dependencies)
+- Responsive mobile-first design
+- Real-time API integration
 
 ## Setup
 
@@ -26,8 +41,13 @@ VECS simulates a complete charging network operator with realistic OCPI endpoint
 ### Installation
 
 ```bash
-# Install dependencies
+# Clone and install
+git clone git@github.com:andrea-barone/vecs.git
+cd vecs
 npm install
+
+# Install frontend dependencies
+cd frontend && npm install && cd ..
 
 # Set up environment
 cp .env.example .env
@@ -36,32 +56,77 @@ cp .env.example .env
 
 ### Environment Variables
 
+**Backend** (`.env` in root):
 ```env
-DATABASE_URL=postgresql://user:password@localhost:5432/vecs
+DATABASE_URL=postgresql://vecs:vecs@localhost:5432/vecs
 NODE_ENV=development
 PORT=3000
 LOG_LEVEL=debug
 BASE_URL=http://localhost:3000
 ```
 
+**Frontend** (`.env.local` in frontend/):
+```env
+VITE_API_URL=http://localhost:3000
+```
+
 ### Create Database
 
 ```bash
 createdb vecs
+# psql vecs < schema.sql  # (auto-migrates on first run)
 ```
 
 ### Run
 
+**Development (both backend + frontend):**
 ```bash
-# Development (with hot reload)
+npm run dev:all
+```
+
+- Backend: `http://localhost:3000`
+- Frontend: `http://localhost:5173`
+
+**Or separately:**
+```bash
+# Terminal 1 - Backend
 npm run dev
 
-# Production build
+# Terminal 2 - Frontend
+npm run dev:frontend
+```
+
+**Production build:**
+```bash
 npm run build
 npm start
 ```
 
-Server starts at `http://localhost:3000`
+## Web Dashboard
+
+The frontend provides an intuitive UI for managing your virtual CPO:
+
+### Features
+- 🎨 **Beautiful Dashboard** — Modern gradient design
+- 🔐 **Quick Registration** — Get API token in seconds
+- 📍 **Location Management** — Create and view charging stations
+- ⚡ **EVSE Management** — Add charge points to locations
+- 🔌 **Connector Config** — Set connector specs (type, power, voltage)
+- 💾 **Auto-save** — Token persisted to localStorage
+- 📱 **Mobile-friendly** — Works on all devices
+- ✨ **Real-time** — See changes immediately
+
+### Access
+
+Open `http://localhost:5173` in your browser after running `npm run dev:all`
+
+### Quick Start
+1. Click **Register eMSP** 
+2. Fill in your party ID, country, business name
+3. Copy the token (auto-saved)
+4. Switch to **Locations** tab
+5. Create locations, EVSEs, and connectors
+6. View your network in real-time
 
 ## API Endpoints
 
@@ -174,7 +239,7 @@ Add connector to EVSE:
 
 ```
 vecs/
-├── src/
+├── src/                        # Backend source
 │   ├── database/
 │   │   └── migrations.ts       # Database schema
 │   ├── middleware/
@@ -187,18 +252,38 @@ vecs/
 │   ├── types/
 │   │   └── ocpi.ts             # TypeScript type definitions
 │   └── index.ts                # Server entry point
-├── package.json
+├── frontend/                   # React frontend
+│   ├── src/
+│   │   ├── components/         # React components
+│   │   │   ├── CredentialsForm.tsx
+│   │   │   ├── LocationForm.tsx
+│   │   │   ├── LocationList.tsx
+│   │   │   ├── EVSEForm.tsx
+│   │   │   └── ConnectorForm.tsx
+│   │   ├── App.tsx             # Main app
+│   │   ├── App.css             # All styling
+│   │   └── main.tsx            # Entry point
+│   ├── vite.config.ts          # Vite config with API proxy
+│   ├── tsconfig.json
+│   └── package.json
+├── dist/                       # Compiled backend
+├── .env.example                # Backend env template
+├── .gitignore
+├── package.json                # Root package (backend + frontend)
 ├── tsconfig.json
 └── README.md
 ```
 
 ## Roadmap
 
-### Phase 1 (Done)
+### Phase 1 (Done ✅)
 - ✅ Credentials & Registration
 - ✅ Locations CRUD
 - ✅ EVSEs & Connectors
 - ✅ Database schema
+- ✅ Beautiful web dashboard
+- ✅ Component-based frontend
+- ✅ Real-time API integration
 
 ### Phase 2 (Next)
 - ⬜ Sessions (charge lifecycle)
@@ -206,18 +291,26 @@ vecs/
 - ⬜ Commands (remote start/stop)
 - ⬜ Tokens (RFID/app auth)
 - ⬜ Tariffs
-- ⬜ Admin API (manage state)
+- ⬜ Admin dashboard & metrics
 
 ### Phase 3
 - ⬜ Multi-version support (2.2, 2.3, etc.)
 - ⬜ State machine & simulation (auto-transitions)
 - ⬜ Error injection & test scenarios
 - ⬜ OpenAPI/Swagger docs
-- ⬜ WebSocket for real-time status
+- ⬜ WebSocket for real-time status updates
+- ⬜ Advanced analytics & reporting
 
 ## Testing
 
-### Example Flow
+### With Web UI (Easiest)
+1. Run `npm run dev:all`
+2. Open `http://localhost:5173`
+3. Register as eMSP
+4. Create locations, EVSEs, connectors
+5. View everything in real-time
+
+### With cURL (API Testing)
 
 ```bash
 # 1. Register eMSP
@@ -231,7 +324,7 @@ curl -X POST http://localhost:3000/ocpi/2.2.1/credentials \
 
 # Response contains token: VECS-xxx...
 
-# 2. Create location (admin)
+# 2. Create location
 curl -X POST http://localhost:3000/ocpi/2.2.1/locations \
   -H "Content-Type: application/json" \
   -d '{
@@ -244,7 +337,7 @@ curl -X POST http://localhost:3000/ocpi/2.2.1/locations \
     "longitude": 13.40
   }'
 
-# 3. List locations (eMSP)
+# 3. List locations (with token)
 curl -X GET http://localhost:3000/ocpi/2.2.1/locations \
   -H "Authorization: Token VECS-xxx..."
 
@@ -257,13 +350,25 @@ curl -X GET http://localhost:3000/ocpi/2.2.1/locations/LOC-001 \
 
 - **Version:** 2.2.1
 - **Reference:** https://github.com/ocpi/ocpi
+- **Spec Validation:** All endpoints follow OCPI 2.2.1 specification
 
-## Contributing
+## Development
 
-- TypeScript for type safety
-- OCPI spec compliance
-- Comprehensive logging
-- PostgreSQL for persistence
+### Backend
+- See `DEVELOPMENT.md` for detailed backend setup & debugging
+
+### Frontend  
+- See `frontend/README.md` for frontend development
+
+## Code Quality
+
+- ✅ Full TypeScript with strict mode
+- ✅ OCPI 2.2.1 compliant
+- ✅ Type-safe database layer
+- ✅ Comprehensive error handling
+- ✅ Clean component architecture
+- ✅ Modern CSS3 (no CSS framework bloat)
+- ✅ Git history with meaningful commits
 
 ## License
 
