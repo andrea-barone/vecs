@@ -26,7 +26,9 @@ export function App() {
   const [error, setError] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'locations' | 'create'>('locations');
 
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  // Use relative paths for API calls (works through nginx proxy in Docker)
+  // Falls back to VITE_API_URL for dev server with proxy setup
+  const API_BASE = import.meta.env.VITE_API_URL || '';
 
   // Initialize mode on load
   useEffect(() => {
