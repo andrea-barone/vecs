@@ -4,6 +4,8 @@ import { locationsService } from '../services/locations.service';
 import { tariffsService } from '../services/tariffs.service';
 import { sessionsService } from '../services/sessions.service';
 import { cdrsService } from '../services/cdrs.service';
+import { tokensService } from '../services/tokens.service';
+import { commandsService } from '../services/commands.service';
 import { ocpiAuth, AuthRequest } from '../middleware/auth';
 
 const router = Router();
@@ -428,6 +430,186 @@ router.get('/cdrs/:cdr_id', async (req: AuthRequest, res: Response) => {
 });
 
 // ========================================
+// TOKENS ENDPOINTS
+// ========================================
+
+router.get('/tokens', async (req: AuthRequest, res: Response) => {
+  try {
+    const filters = {
+      type: req.query.type as string | undefined,
+      issuer: req.query.issuer as string | undefined,
+      valid: req.query.valid !== undefined ? req.query.valid === 'true' : undefined,
+      limit: req.query.limit ? parseInt(req.query.limit as string) : 100,
+      offset: req.query.offset ? parseInt(req.query.offset as string) : 0,
+    };
+
+    const result = await tokensService.listTokens(filters);
+    
+    res.set('X-Total-Count', result.total.toString());
+    res.set('X-Limit', filters.limit.toString());
+    
+    ocpiResponse(result.tokens, 1000, 'Tokens retrieved successfully', res);
+  } catch (err) {
+    console.error('Error listing tokens:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+router.get('/tokens/:token_uid', async (req: AuthRequest, res: Response) => {
+  try {
+    const token_uid = Array.isArray(req.params.token_uid) ? req.params.token_uid[0] : req.params.token_uid;
+    const token = await tokensService.getToken(token_uid);
+    if (!token) {
+      return ocpiResponse(null, 2004, `Token ${token_uid} not found`, res);
+    }
+    ocpiResponse(token, 1000, 'Token retrieved successfully', res);
+  } catch (err) {
+    console.error('Error getting token:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+// POST token authorize (eMSP sends token to CPO for authorization)
+router.post('/tokens/:token_uid/authorize', async (req: AuthRequest, res: Response) => {
+  try {
+    const token_uid = Array.isArray(req.params.token_uid) ? req.params.token_uid[0] : req.params.token_uid;
+    const result = await tokensService.authorizeToken(token_uid);
+    
+    ocpiResponse({
+      allowed: result.info?.allowed || 'NOT_ALLOWED',
+      token: result.token,
+      authorization_reference: result.allowed ? `AUTH-${Date.now()}` : undefined,
+    }, 1000, result.allowed ? 'Token authorized' : 'Token not authorized', res);
+  } catch (err) {
+    console.error('Error authorizing token:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+// PUT is used by eMSP to push token updates to CPO
+router.put('/tokens/:token_uid', async (req: AuthRequest, res: Response) => {
+  try {
+    const token_uid = Array.isArray(req.params.token_uid) ? req.params.token_uid[0] : req.params.token_uid;
+    const { type, auth_id, visual_number, issuer, valid, whitelist, language } = req.body;
+
+    // Check if token exists, if not create it
+    let token = await tokensService.getToken(token_uid);
+    
+    if (!token) {
+      if (!type || !auth_id || !issuer) {
+        return ocpiResponse(null, 3000, 'Missing required fields for new token', res);
+      }
+      token = await tokensService.createToken({
+        token_uid,
+        type,
+        auth_id,
+        visual_number,
+        issuer,
+        valid,
+        whitelist,
+        language,
+      });
+      return ocpiResponse(token, 1001, 'Token created successfully', res);
+    }
+
+    // Update existing token
+    token = await tokensService.updateToken(token_uid, {
+      type,
+      auth_id,
+      visual_number,
+      issuer,
+      valid,
+      whitelist,
+      language,
+    });
+
+    ocpiResponse(token, 1000, 'Token updated successfully', res);
+  } catch (err) {
+    console.error('Error on PUT token:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+router.patch('/tokens/:token_uid', async (req: AuthRequest, res: Response) => {
+  try {
+    const token_uid = Array.isArray(req.params.token_uid) ? req.params.token_uid[0] : req.params.token_uid;
+    const token = await tokensService.updateToken(token_uid, req.body);
+    if (!token) {
+      return ocpiResponse(null, 2004, `Token ${token_uid} not found`, res);
+    }
+    ocpiResponse(token, 1000, 'Token updated successfully', res);
+  } catch (err) {
+    console.error('Error updating token:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+// Admin endpoint to create sample tokens
+router.post('/tokens/samples', async (req: AuthRequest, res: Response) => {
+  try {
+    const created = await tokensService.createSampleTokens();
+    ocpiResponse(created, 1001, `Created ${created.length} sample tokens`, res);
+  } catch (err) {
+    console.error('Error creating sample tokens:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+// ========================================
+// COMMANDS ENDPOINTS
+// ========================================
+
+router.post('/commands/START_SESSION', async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await commandsService.handleStartSession(req.body);
+    ocpiResponse(result, result.result === 'ACCEPTED' ? 1000 : 3000, result.message || result.result, res);
+  } catch (err) {
+    console.error('Error on START_SESSION:', err);
+    ocpiResponse({ result: 'REJECTED', message: 'Internal server error' }, 2000, 'Internal server error', res);
+  }
+});
+
+router.post('/commands/STOP_SESSION', async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await commandsService.handleStopSession(req.body);
+    ocpiResponse(result, result.result === 'ACCEPTED' ? 1000 : 3000, result.message || result.result, res);
+  } catch (err) {
+    console.error('Error on STOP_SESSION:', err);
+    ocpiResponse({ result: 'REJECTED', message: 'Internal server error' }, 2000, 'Internal server error', res);
+  }
+});
+
+router.post('/commands/UNLOCK_CONNECTOR', async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await commandsService.handleUnlockConnector(req.body);
+    ocpiResponse(result, result.result === 'ACCEPTED' ? 1000 : 3000, result.message || result.result, res);
+  } catch (err) {
+    console.error('Error on UNLOCK_CONNECTOR:', err);
+    ocpiResponse({ result: 'REJECTED', message: 'Internal server error' }, 2000, 'Internal server error', res);
+  }
+});
+
+router.post('/commands/RESERVE_NOW', async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await commandsService.handleReserveNow(req.body);
+    ocpiResponse(result, result.result === 'ACCEPTED' ? 1000 : 3000, result.message || result.result, res);
+  } catch (err) {
+    console.error('Error on RESERVE_NOW:', err);
+    ocpiResponse({ result: 'REJECTED', message: 'Internal server error' }, 2000, 'Internal server error', res);
+  }
+});
+
+router.post('/commands/CANCEL_RESERVATION', async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await commandsService.handleCancelReservation(req.body);
+    ocpiResponse(result, result.result === 'ACCEPTED' ? 1000 : 3000, result.message || result.result, res);
+  } catch (err) {
+    console.error('Error on CANCEL_RESERVATION:', err);
+    ocpiResponse({ result: 'REJECTED', message: 'Internal server error' }, 2000, 'Internal server error', res);
+  }
+});
+
+// ========================================
 // VERSIONS ENDPOINT (OCPI standard)
 // ========================================
 
@@ -453,6 +635,8 @@ router.get('/', (req: AuthRequest, res: Response) => {
       { identifier: 'tariffs', role: 'SENDER', url: `${baseUrl}/ocpi/2.2.1/tariffs` },
       { identifier: 'sessions', role: 'SENDER', url: `${baseUrl}/ocpi/2.2.1/sessions` },
       { identifier: 'cdrs', role: 'SENDER', url: `${baseUrl}/ocpi/2.2.1/cdrs` },
+      { identifier: 'tokens', role: 'RECEIVER', url: `${baseUrl}/ocpi/2.2.1/tokens` },
+      { identifier: 'commands', role: 'RECEIVER', url: `${baseUrl}/ocpi/2.2.1/commands` },
     ],
   }, 1000, 'Version details retrieved successfully', res);
 });
