@@ -601,3 +601,98 @@ body {
   align-self: center;
   width: 100%;
 }
+
+/* Location Expanded View */
+.location-expanded {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+}
+
+.detail-row {
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 0.5rem;
+}
+
+.evse-section {
+  margin-top: 1rem;
+}
+
+.evse-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.evse-section-header h4 {
+  margin: 0;
+  color: #333;
+  font-size: 1rem;
+}
+
+.btn-small {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-add {
+  background: #48bb78;
+  color: white;
+}
+
+.btn-add:hover {
+  background: #38a169;
+}
+
+.add-evse-form {
+  background: #f9f9f9;
+  padding: 0.75rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.form-row-inline {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.form-row-inline input,
+.form-row-inline select {
+  flex: 1;
+  min-width: 120px;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.form-row-inline button {
+  flex-shrink: 0;
+}
+
+.error-small {
+  color: #c33;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.no-evses,
+.no-connectors {
+  color: #999;
+  font-size: 0.85rem;
+  font-style: italic;
+  margin: 0.5rem 0;
+}
+
+.evse-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
