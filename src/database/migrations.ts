@@ -6,6 +6,93 @@ const pool = new Pool({
 
 export const runMigrations = async () => {
   try {
+    // ========================================
+    // OCPI REQUEST/RESPONSE LOGS
+    // ========================================
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ocpi_logs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        direction VARCHAR(10) NOT NULL,
+        method VARCHAR(10) NOT NULL,
+        path TEXT NOT NULL,
+        query_params JSONB,
+        request_headers JSONB,
+        request_body JSONB,
+        response_status INTEGER,
+        response_headers JSONB,
+        response_body JSONB,
+        duration_ms INTEGER,
+        emsp_token VARCHAR(255),
+        company_id UUID,
+        error TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON ocpi_logs(timestamp DESC)`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_logs_path ON ocpi_logs(path)`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_logs_emsp ON ocpi_logs(emsp_token)`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_logs_direction ON ocpi_logs(direction)`).catch(() => {});
+
+    // ========================================
+    // COMPANIES (Multi-tenancy)
+    // ========================================
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS companies (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(255) NOT NULL,
+        country_code VARCHAR(2) NOT NULL,
+        party_id VARCHAR(3) NOT NULL,
+        webhook_url TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(country_code, party_id)
+      )
+    `);
+
+    // ========================================
+    // ADMIN USERS
+    // ========================================
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS admin_users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID REFERENCES companies(id),
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        is_super_admin BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // ========================================
+    // PUSH LOGS (Outbound notifications)
+    // ========================================
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS push_logs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        emsp_id UUID,
+        endpoint_type VARCHAR(50),
+        object_type VARCHAR(50),
+        object_id VARCHAR(255),
+        method VARCHAR(10),
+        url TEXT,
+        request_headers JSONB,
+        request_body JSONB,
+        response_status INTEGER,
+        response_body JSONB,
+        success BOOLEAN,
+        error TEXT,
+        duration_ms INTEGER,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_push_logs_created ON push_logs(created_at DESC)`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_push_logs_emsp ON push_logs(emsp_id)`).catch(() => {});
+
+    // ========================================
+    // EMSP CREDENTIALS
+    // ========================================
     await pool.query(`
       CREATE TABLE IF NOT EXISTS emsp_credentials (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -160,10 +247,33 @@ export const runMigrations = async () => {
         valid BOOLEAN DEFAULT TRUE,
         whitelist VARCHAR(50),
         language VARCHAR(5),
+        company_id UUID,
+        emsp_id UUID,
         last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Add company_id to existing tables if missing
+    await pool.query(`ALTER TABLE locations ADD COLUMN IF NOT EXISTS company_id UUID`).catch(() => {});
+    await pool.query(`ALTER TABLE tariffs ADD COLUMN IF NOT EXISTS company_id UUID`).catch(() => {});
+    await pool.query(`ALTER TABLE emsp_credentials ADD COLUMN IF NOT EXISTS company_id UUID`).catch(() => {});
+    await pool.query(`ALTER TABLE emsp_credentials ADD COLUMN IF NOT EXISTS endpoints JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS company_id UUID`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS company_id UUID`).catch(() => {});
+    await pool.query(`ALTER TABLE tokens ADD COLUMN IF NOT EXISTS company_id UUID`).catch(() => {});
+    await pool.query(`ALTER TABLE tokens ADD COLUMN IF NOT EXISTS emsp_id UUID`).catch(() => {});
+
+    // Add charging_periods to sessions
+    await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS charging_periods JSONB DEFAULT '[]'`).catch(() => {});
+    await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS total_cost DECIMAL(10, 4)`).catch(() => {});
+    await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS meter_id VARCHAR(255)`).catch(() => {});
+
+    // Add CDR fields
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS charging_periods JSONB DEFAULT '[]'`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS tariffs JSONB DEFAULT '[]'`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS signed_data TEXT`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS remark TEXT`).catch(() => {});
 
     console.log('✓ Database migrations completed');
   } catch (err) {

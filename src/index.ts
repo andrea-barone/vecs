@@ -1,18 +1,32 @@
 import 'dotenv/config';
 import express, { Request, Response } from 'express';
+import cors from 'cors';
 import { runMigrations } from './database/migrations';
 import ocpiRoutes from './routes/ocpi';
+import adminRoutes from './routes/admin';
+import simulationRoutes from './routes/simulation';
+import { requestLogger } from './middleware/requestLogger';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(express.json());
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+
+// Request logging middleware for OCPI endpoints
+app.use(requestLogger);
 
 // Health check
 app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Admin routes (no auth for debugging tool)
+app.use('/admin', adminRoutes);
+
+// Simulation routes for charge testing
+app.use('/admin/simulate', simulationRoutes);
 
 // OCPI v2.2.1 routes
 app.use('/ocpi/2.2.1', ocpiRoutes);

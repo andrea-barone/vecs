@@ -2,6 +2,8 @@ import { Router, Response } from 'express';
 import { credentialsService } from '../services/credentials.service';
 import { locationsService } from '../services/locations.service';
 import { tariffsService } from '../services/tariffs.service';
+import { sessionsService } from '../services/sessions.service';
+import { cdrsService } from '../services/cdrs.service';
 import { ocpiAuth, AuthRequest } from '../middleware/auth';
 
 const router = Router();
@@ -325,6 +327,134 @@ router.delete('/tariffs/:tariff_id', async (req: AuthRequest, res: Response) => 
     console.error('Error deleting tariff:', err);
     ocpiResponse(null, 2000, 'Internal server error', res);
   }
+});
+
+// ========================================
+// SESSIONS ENDPOINTS
+// ========================================
+
+router.get('/sessions', async (req: AuthRequest, res: Response) => {
+  try {
+    const filters = {
+      status: req.query.status as string | undefined,
+      location_id: req.query.location_id as string | undefined,
+      auth_id: req.query.auth_id as string | undefined,
+      limit: req.query.limit ? parseInt(req.query.limit as string) : 100,
+      offset: req.query.offset ? parseInt(req.query.offset as string) : 0,
+    };
+
+    const result = await sessionsService.listSessions(filters);
+    
+    res.set('X-Total-Count', result.total.toString());
+    res.set('X-Limit', filters.limit.toString());
+    
+    ocpiResponse(result.sessions, 1000, 'Sessions retrieved successfully', res);
+  } catch (err) {
+    console.error('Error listing sessions:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+router.get('/sessions/:session_id', async (req: AuthRequest, res: Response) => {
+  try {
+    const session_id = Array.isArray(req.params.session_id) ? req.params.session_id[0] : req.params.session_id;
+    const session = await sessionsService.getSession(session_id);
+    if (!session) {
+      return ocpiResponse(null, 2004, `Session ${session_id} not found`, res);
+    }
+    ocpiResponse(session, 1000, 'Session retrieved successfully', res);
+  } catch (err) {
+    console.error('Error getting session:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+// PUT is used by eMSP to receive session updates (receiver interface)
+router.put('/sessions/:session_id', async (req: AuthRequest, res: Response) => {
+  try {
+    const session_id = Array.isArray(req.params.session_id) ? req.params.session_id[0] : req.params.session_id;
+    // This is the receiver interface - eMSPs receive session data from CPO
+    // For our simulator, we just acknowledge receipt
+    const session = await sessionsService.getSession(session_id);
+    if (!session) {
+      return ocpiResponse(null, 2004, `Session ${session_id} not found`, res);
+    }
+    ocpiResponse(session, 1000, 'Session acknowledged', res);
+  } catch (err) {
+    console.error('Error on PUT session:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+// ========================================
+// CDR ENDPOINTS
+// ========================================
+
+router.get('/cdrs', async (req: AuthRequest, res: Response) => {
+  try {
+    const filters = {
+      location_id: req.query.location_id as string | undefined,
+      auth_id: req.query.auth_id as string | undefined,
+      startTime: req.query.date_from ? new Date(req.query.date_from as string) : undefined,
+      endTime: req.query.date_to ? new Date(req.query.date_to as string) : undefined,
+      limit: req.query.limit ? parseInt(req.query.limit as string) : 100,
+      offset: req.query.offset ? parseInt(req.query.offset as string) : 0,
+    };
+
+    const result = await cdrsService.listCDRs(filters);
+    
+    res.set('X-Total-Count', result.total.toString());
+    res.set('X-Limit', filters.limit.toString());
+    
+    ocpiResponse(result.cdrs, 1000, 'CDRs retrieved successfully', res);
+  } catch (err) {
+    console.error('Error listing CDRs:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+router.get('/cdrs/:cdr_id', async (req: AuthRequest, res: Response) => {
+  try {
+    const cdr_id = Array.isArray(req.params.cdr_id) ? req.params.cdr_id[0] : req.params.cdr_id;
+    const cdr = await cdrsService.getCDR(cdr_id);
+    if (!cdr) {
+      return ocpiResponse(null, 2004, `CDR ${cdr_id} not found`, res);
+    }
+    ocpiResponse(cdr, 1000, 'CDR retrieved successfully', res);
+  } catch (err) {
+    console.error('Error getting CDR:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+// ========================================
+// VERSIONS ENDPOINT (OCPI standard)
+// ========================================
+
+router.get('/versions', (req: AuthRequest, res: Response) => {
+  const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+  
+  ocpiResponse([
+    {
+      version: '2.2.1',
+      url: `${baseUrl}/ocpi/2.2.1`,
+    }
+  ], 1000, 'Versions retrieved successfully', res);
+});
+
+router.get('/', (req: AuthRequest, res: Response) => {
+  const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+  
+  ocpiResponse({
+    version: '2.2.1',
+    endpoints: [
+      { identifier: 'credentials', role: 'SENDER', url: `${baseUrl}/ocpi/2.2.1/credentials` },
+      { identifier: 'locations', role: 'SENDER', url: `${baseUrl}/ocpi/2.2.1/locations` },
+      { identifier: 'tariffs', role: 'SENDER', url: `${baseUrl}/ocpi/2.2.1/tariffs` },
+      { identifier: 'sessions', role: 'SENDER', url: `${baseUrl}/ocpi/2.2.1/sessions` },
+      { identifier: 'cdrs', role: 'SENDER', url: `${baseUrl}/ocpi/2.2.1/cdrs` },
+    ],
+  }, 1000, 'Version details retrieved successfully', res);
 });
 
 export default router;

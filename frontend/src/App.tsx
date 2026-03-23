@@ -6,6 +6,8 @@ import { LocationForm } from './components/LocationForm';
 import { EVSEForm } from './components/EVSEForm';
 import { AdminSetup } from './components/AdminSetup';
 import { TariffManager } from './components/TariffManager';
+import { LogViewer } from './components/LogViewer';
+import { SessionManager } from './components/SessionManager';
 
 interface Location {
   id: string;
@@ -33,7 +35,7 @@ export function App() {
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'locations' | 'create' | 'tariffs'>('locations');
+  const [activeTab, setActiveTab] = useState<'locations' | 'create' | 'tariffs' | 'sessions' | 'logs'>('locations');
 
   // Use relative paths for API calls (works through nginx proxy in Docker)
   // Falls back to VITE_API_URL for dev server with proxy setup
@@ -197,11 +199,35 @@ export function App() {
                 >
                   💰 Tariffs
                 </button>
+                <button
+                  className={`tab ${activeTab === 'sessions' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('sessions')}
+                >
+                  ⚡ Sessions
+                </button>
+                <button
+                  className={`tab ${activeTab === 'logs' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('logs')}
+                >
+                  📋 Logs
+                </button>
               </nav>
 
               {activeTab === 'tariffs' && (
                 <section className="section">
                   <TariffManager apiBase={API_BASE} />
+                </section>
+              )}
+
+              {activeTab === 'sessions' && (
+                <section className="section">
+                  <SessionManager apiBase={API_BASE} />
+                </section>
+              )}
+
+              {activeTab === 'logs' && (
+                <section className="section">
+                  <LogViewer apiBase={API_BASE} />
                 </section>
               )}
 
