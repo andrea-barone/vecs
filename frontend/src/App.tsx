@@ -9,6 +9,7 @@ import { TariffManager } from './components/TariffManager';
 import { LogViewer } from './components/LogViewer';
 import { SessionManager } from './components/SessionManager';
 import { TokenManager } from './components/TokenManager';
+import { Dashboard } from './components/Dashboard';
 
 interface Location {
   id: string;
@@ -36,7 +37,7 @@ export function App() {
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'locations' | 'create' | 'tariffs' | 'sessions' | 'tokens' | 'logs'>('locations');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'locations' | 'create' | 'tariffs' | 'sessions' | 'tokens' | 'logs'>('dashboard');
 
   // Use relative paths for API calls (works through nginx proxy in Docker)
   // Falls back to VITE_API_URL for dev server with proxy setup
@@ -183,6 +184,12 @@ export function App() {
             <div className="container">
               <nav className="tabs">
                 <button
+                  className={`tab ${activeTab === 'dashboard' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('dashboard')}
+                >
+                  📊 Dashboard
+                </button>
+                <button
                   className={`tab ${activeTab === 'locations' ? 'active' : ''}`}
                   onClick={() => setActiveTab('locations')}
                 >
@@ -219,6 +226,12 @@ export function App() {
                   📋 Logs
                 </button>
               </nav>
+
+              {activeTab === 'dashboard' && (
+                <section className="section">
+                  <Dashboard apiBase={API_BASE} />
+                </section>
+              )}
 
               {activeTab === 'tariffs' && (
                 <section className="section">
