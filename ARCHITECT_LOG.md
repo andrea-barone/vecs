@@ -184,6 +184,29 @@ Implemented:
   - Meter value controls
   - Quick increment buttons
 
-### Task 4: Next Priority - Tokens Module (00:19)
-**Status:** Starting now
+### Task 4: Tokens Module (00:19)
+**Status:** ✅ COMPLETE (00:22)
+
+Implemented:
+- `src/services/tokens.service.ts` - Full token CRUD + authorization
+- Tokens endpoints in OCPI routes (GET/PUT/PATCH)
+- Token authorization endpoint
+- Sample tokens for testing (RFID, APP_USER, blocked)
+- Whitelist support
+
+### Task 5: Commands Module (00:20)
+**Status:** ✅ COMPLETE (00:22)
+
+Implemented:
+- `src/services/commands.service.ts` - All OCPI commands
+- START_SESSION command (creates charging session via token)
+- STOP_SESSION command (stops session, generates CDR)
+- UNLOCK_CONNECTOR command (simulation only)
+- RESERVE_NOW command (acknowledgement)
+- CANCEL_RESERVATION command (acknowledgement)
+- Async response callbacks to eMSP response_url
+- All responses logged to push_logs
+
+### Task 6: Frontend Improvements (00:22)
+**Status:** In Progress
 

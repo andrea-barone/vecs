@@ -8,6 +8,7 @@ import { AdminSetup } from './components/AdminSetup';
 import { TariffManager } from './components/TariffManager';
 import { LogViewer } from './components/LogViewer';
 import { SessionManager } from './components/SessionManager';
+import { TokenManager } from './components/TokenManager';
 
 interface Location {
   id: string;
@@ -35,7 +36,7 @@ export function App() {
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'locations' | 'create' | 'tariffs' | 'sessions' | 'logs'>('locations');
+  const [activeTab, setActiveTab] = useState<'locations' | 'create' | 'tariffs' | 'sessions' | 'tokens' | 'logs'>('locations');
 
   // Use relative paths for API calls (works through nginx proxy in Docker)
   // Falls back to VITE_API_URL for dev server with proxy setup
@@ -206,6 +207,12 @@ export function App() {
                   ⚡ Sessions
                 </button>
                 <button
+                  className={`tab ${activeTab === 'tokens' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('tokens')}
+                >
+                  🔑 Tokens
+                </button>
+                <button
                   className={`tab ${activeTab === 'logs' ? 'active' : ''}`}
                   onClick={() => setActiveTab('logs')}
                 >
@@ -222,6 +229,12 @@ export function App() {
               {activeTab === 'sessions' && (
                 <section className="section">
                   <SessionManager apiBase={API_BASE} />
+                </section>
+              )}
+
+              {activeTab === 'tokens' && (
+                <section className="section">
+                  <TokenManager apiBase={API_BASE} />
                 </section>
               )}
 
