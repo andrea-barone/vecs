@@ -696,3 +696,108 @@ body {
   flex-direction: column;
   gap: 0.5rem;
 }
+
+/* Connector Section */
+.connectors-section {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed #eee;
+}
+
+.connectors-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.connectors-label {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.btn-tiny {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.add-connector-form {
+  background: #f0f4ff;
+  padding: 0.75rem;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+}
+
+.connector-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 0.5rem;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.form-field label {
+  font-size: 0.7rem;
+  color: #666;
+  text-transform: uppercase;
+}
+
+.form-field input,
+.form-field select {
+  padding: 0.4rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.form-field-button {
+  display: flex;
+  align-items: flex-end;
+}
+
+.form-field-button button {
+  width: 100%;
+}
+
+.connector-item {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  background: white;
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+  margin-bottom: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.connector-id {
+  font-weight: bold;
+  color: #667eea;
+}
+
+.connector-type {
+  background: #e0e7ff;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  color: #4338ca;
+}
+
+.connector-format {
+  color: #888;
+  font-size: 0.75rem;
+}
+
+.connectors {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
