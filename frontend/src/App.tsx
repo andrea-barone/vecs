@@ -11,6 +11,7 @@ import { SessionManager } from './components/SessionManager';
 import { TokenManager } from './components/TokenManager';
 import { Dashboard } from './components/Dashboard';
 import { PushLogViewer } from './components/PushLogViewer';
+import { EMSPManager } from './components/EMSPManager';
 
 interface Location {
   id: string;
@@ -38,7 +39,7 @@ export function App() {
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'locations' | 'create' | 'tariffs' | 'sessions' | 'tokens' | 'logs'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'locations' | 'create' | 'tariffs' | 'sessions' | 'tokens' | 'emsps' | 'logs'>('dashboard');
 
   // Use relative paths for API calls (works through nginx proxy in Docker)
   // Falls back to VITE_API_URL for dev server with proxy setup
@@ -221,6 +222,12 @@ export function App() {
                   🔑 Tokens
                 </button>
                 <button
+                  className={`tab ${activeTab === 'emsps' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('emsps')}
+                >
+                  🏢 eMSPs
+                </button>
+                <button
                   className={`tab ${activeTab === 'logs' ? 'active' : ''}`}
                   onClick={() => setActiveTab('logs')}
                 >
@@ -249,6 +256,12 @@ export function App() {
               {activeTab === 'tokens' && (
                 <section className="section">
                   <TokenManager apiBase={API_BASE} />
+                </section>
+              )}
+
+              {activeTab === 'emsps' && (
+                <section className="section">
+                  <EMSPManager apiBase={API_BASE} />
                 </section>
               )}
 
