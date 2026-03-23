@@ -68,7 +68,7 @@ export function LocationList({
                   </div>
                   {evse.connectors && evse.connectors.length > 0 && (
                     <div className="connectors">
-                      {evse.connectors.map((connector) => (
+                      {evse.connectors.map((connector: any) => (
                         <div key={connector.id} className="connector-item">
                           <span className="connector-type">{connector.standard}</span>
                           <span className="power">{connector.power_kw || connector.amperage}A</span>

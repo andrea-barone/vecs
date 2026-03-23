@@ -527,3 +527,77 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* Welcome Grid */
+.welcome-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 2rem;
+  margin: 2rem 0;
+}
+
+.welcome-card {
+  background: white;
+  border: 2px solid #eee;
+  border-radius: 12px;
+  padding: 2rem;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.welcome-card:hover {
+  border-color: #667eea;
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);
+  transform: translateY(-4px);
+}
+
+.welcome-card .welcome-icon {
+  font-size: 4rem;
+  line-height: 1;
+  margin-bottom: 0.5rem;
+}
+
+.welcome-card h2 {
+  color: #333;
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.welcome-card p {
+  color: #666;
+  margin: 0.5rem 0 1rem 0;
+  font-size: 0.95rem;
+}
+
+.welcome-card ul {
+  text-align: left;
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+  color: #666;
+  font-size: 0.9rem;
+  line-height: 1.8;
+  list-style: none;
+}
+
+.welcome-card ul li {
+  padding-left: 1.5rem;
+  position: relative;
+}
+
+.welcome-card ul li::before {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  color: #48bb78;
+  font-weight: bold;
+}
+
+.welcome-card .btn {
+  margin-top: auto;
+  align-self: center;
+  width: 100%;
+}
