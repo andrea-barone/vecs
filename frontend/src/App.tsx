@@ -10,6 +10,7 @@ import { LogViewer } from './components/LogViewer';
 import { SessionManager } from './components/SessionManager';
 import { TokenManager } from './components/TokenManager';
 import { Dashboard } from './components/Dashboard';
+import { PushLogViewer } from './components/PushLogViewer';
 
 interface Location {
   id: string;
@@ -254,6 +255,9 @@ export function App() {
               {activeTab === 'logs' && (
                 <section className="section">
                   <LogViewer apiBase={API_BASE} />
+                  <div style={{ marginTop: '2rem' }}>
+                    <PushLogViewer apiBase={API_BASE} />
+                  </div>
                 </section>
               )}
 
