@@ -74,9 +74,9 @@ router.get('/credentials', ocpiAuth, async (req: AuthRequest, res: Response) => 
 
 /**
  * GET /ocpi/2.2.1/locations
- * List all locations (requires token)
+ * List all locations (no auth required for admin access)
  */
-router.get('/locations', ocpiAuth, async (req: AuthRequest, res: Response) => {
+router.get('/locations', async (req: AuthRequest, res: Response) => {
   try {
     const locations = await locationsService.listLocations();
     ocpiResponse(locations, 1000, 'Locations retrieved successfully', res);
@@ -88,9 +88,9 @@ router.get('/locations', ocpiAuth, async (req: AuthRequest, res: Response) => {
 
 /**
  * GET /ocpi/2.2.1/locations/:location_id
- * Get specific location
+ * Get specific location (no auth required for admin access)
  */
-router.get('/locations/:location_id', ocpiAuth, async (req: AuthRequest, res: Response) => {
+router.get('/locations/:location_id', async (req: AuthRequest, res: Response) => {
   try {
     const location_id = Array.isArray(req.params.location_id) 
       ? req.params.location_id[0] 
