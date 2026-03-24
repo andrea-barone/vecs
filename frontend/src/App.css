@@ -2617,3 +2617,172 @@ body {
   flex-wrap: wrap;
   gap: var(--space-sm);
 }
+
+/* ========================================
+   STATS CARDS
+   ======================================== */
+
+.stats-row {
+  display: flex;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.stat-card {
+  background: var(--color-bg-secondary);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  text-align: center;
+  min-width: 100px;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  margin-top: var(--space-xs);
+}
+
+/* ========================================
+   AUTH TEST
+   ======================================== */
+
+.auth-test-card {
+  background: var(--color-bg-secondary);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-lg);
+}
+
+.auth-test-card h3 {
+  margin: 0 0 var(--space-md) 0;
+  font-size: 14px;
+}
+
+.auth-result {
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.auth-result.success {
+  background: var(--color-primary-light);
+  color: #166534;
+}
+
+.auth-result.failed {
+  background: #fef2f2;
+  color: var(--color-error);
+}
+
+/* ========================================
+   SIMULATOR
+   ======================================== */
+
+.simulator-panel {
+  padding: var(--space-md) 0;
+}
+
+.simulator-panel h2 {
+  margin-bottom: var(--space-md);
+}
+
+.start-form {
+  max-width: 600px;
+}
+
+.session-card-large {
+  background: var(--color-bg-secondary);
+  padding: var(--space-lg);
+  border-radius: var(--radius-lg);
+  max-width: 500px;
+}
+
+.session-card-large .session-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.meter-update {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-lg);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-border);
+}
+
+.quick-buttons {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+/* ========================================
+   SUB TABS
+   ======================================== */
+
+.sub-tabs {
+  display: flex;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-lg);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--space-sm);
+}
+
+.sub-tab {
+  padding: var(--space-sm) var(--space-md);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sub-tab:hover {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
+.sub-tab.active {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+/* Status badges for sessions */
+.status-badge.status-active,
+.status-badge.status-charging {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-badge.status-completed {
+  background: var(--color-primary-light);
+  color: #166534;
+}
+
+.status-badge.status-pending {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.status-badge.status-invalid {
+  background: #fef2f2;
+  color: var(--color-error);
+}
+
+/* Text helpers */
+.text-muted {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
