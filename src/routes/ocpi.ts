@@ -84,19 +84,34 @@ router.get('/locations/:location_id', async (req: AuthRequest, res: Response) =>
 
 router.post('/locations', async (req: AuthRequest, res: Response) => {
   try {
-    const { location_id, type, name, address, city, postal_code, country, latitude, longitude, operator_name, time_zone, charging_when_closed, facilities } = req.body;
+    const { 
+      location_id, country_code, party_id, publish, publish_allowed_to,
+      type, name, address, city, postal_code, state, country,
+      latitude, longitude, related_locations, directions,
+      operator_name, operator_website, operator_logo,
+      suboperator_name, suboperator_website,
+      owner_name, owner_website,
+      time_zone, opening_times, charging_when_closed,
+      facilities, images, energy_mix
+    } = req.body;
 
-    if (!location_id || !address || !city || !postal_code || !country) {
-      return ocpiResponse(null, 3000, 'Missing required fields', res);
+    if (!location_id || !address || !city || !country) {
+      return ocpiResponse(null, 3000, 'Missing required fields: location_id, address, city, country', res);
     }
     if (latitude === undefined || longitude === undefined) {
       return ocpiResponse(null, 3000, 'Missing required fields: latitude, longitude', res);
     }
 
     const location = await locationsService.createLocation({
-      location_id, type, name, address, city, postal_code, country,
+      location_id, country_code, party_id, publish, publish_allowed_to,
+      type, name, address, city, postal_code, state, country,
       latitude: parseFloat(latitude), longitude: parseFloat(longitude),
-      operator_name, time_zone, charging_when_closed, facilities,
+      related_locations, directions,
+      operator_name, operator_website, operator_logo,
+      suboperator_name, suboperator_website,
+      owner_name, owner_website,
+      time_zone, opening_times, charging_when_closed,
+      facilities, images, energy_mix,
     });
 
     ocpiResponse(location, 1001, 'Location created successfully', res);
@@ -144,13 +159,23 @@ router.delete('/locations/:location_id', async (req: AuthRequest, res: Response)
 router.post('/locations/:location_id/evses', async (req: AuthRequest, res: Response) => {
   try {
     const location_id = Array.isArray(req.params.location_id) ? req.params.location_id[0] : req.params.location_id;
-    const { evse_id, uid, status, floor_level, physical_reference } = req.body;
+    const { 
+      evse_id, uid, status, status_schedule, capabilities,
+      floor_level, latitude, longitude, physical_reference,
+      directions, parking_restrictions, images
+    } = req.body;
 
     if (!evse_id) {
       return ocpiResponse(null, 3000, 'Missing required field: evse_id', res);
     }
 
-    const evse = await locationsService.addEVSE(location_id, { evse_id, uid, status, floor_level, physical_reference });
+    const evse = await locationsService.addEVSE(location_id, { 
+      evse_id, uid, status, status_schedule, capabilities,
+      floor_level, 
+      latitude: latitude ? parseFloat(latitude) : undefined,
+      longitude: longitude ? parseFloat(longitude) : undefined,
+      physical_reference, directions, parking_restrictions, images
+    });
     ocpiResponse(evse, 1001, 'EVSE created successfully', res);
   } catch (err: any) {
     console.error('Error adding EVSE:', err);
@@ -196,17 +221,26 @@ router.delete('/locations/:location_id/evses/:evse_id', async (req: AuthRequest,
 router.post('/locations/:location_id/evses/:evse_id/connectors', async (req: AuthRequest, res: Response) => {
   try {
     const evse_id = Array.isArray(req.params.evse_id) ? req.params.evse_id[0] : req.params.evse_id;
-    const { connector_id, standard, format, power_type, voltage, amperage, power_kw, tariff_id } = req.body;
+    const { 
+      connector_id, standard, format, power_type, 
+      max_voltage, max_amperage, voltage, amperage,  // Support both old and new naming
+      max_electric_power, tariff_ids, tariff_id, terms_and_conditions
+    } = req.body;
 
-    if (!connector_id || !standard || !format || !power_type || !voltage || !amperage) {
-      return ocpiResponse(null, 3000, 'Missing required fields: connector_id, standard, format, power_type, voltage, amperage', res);
+    const finalVoltage = max_voltage || voltage;
+    const finalAmperage = max_amperage || amperage;
+
+    if (!connector_id || !standard || !format || !power_type || !finalVoltage || !finalAmperage) {
+      return ocpiResponse(null, 3000, 'Missing required fields: connector_id, standard, format, power_type, max_voltage, max_amperage', res);
     }
 
     const connector = await locationsService.addConnector(evse_id, {
       connector_id, standard, format, power_type,
-      voltage: parseInt(voltage), amperage: parseInt(amperage),
-      power_kw: power_kw ? parseFloat(power_kw) : undefined,
-      tariff_id,
+      max_voltage: parseInt(finalVoltage),
+      max_amperage: parseInt(finalAmperage),
+      max_electric_power: max_electric_power ? parseInt(max_electric_power) : undefined,
+      tariff_ids: tariff_ids || (tariff_id ? [tariff_id] : undefined),
+      terms_and_conditions,
     });
 
     ocpiResponse(connector, 1001, 'Connector created successfully', res);

@@ -113,27 +113,57 @@ export const runMigrations = async () => {
       CREATE TABLE IF NOT EXISTS locations (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         location_id VARCHAR(255) NOT NULL UNIQUE,
+        country_code VARCHAR(2) NOT NULL DEFAULT 'DE',
+        party_id VARCHAR(3) NOT NULL DEFAULT 'VEC',
+        publish BOOLEAN NOT NULL DEFAULT TRUE,
+        publish_allowed_to JSONB,
         type VARCHAR(50) NOT NULL DEFAULT 'OTHER',
         name VARCHAR(255),
         address VARCHAR(255) NOT NULL,
         city VARCHAR(100) NOT NULL,
-        postal_code VARCHAR(20) NOT NULL,
-        country VARCHAR(2) NOT NULL,
+        postal_code VARCHAR(20),
+        state VARCHAR(20),
+        country VARCHAR(3) NOT NULL,
         latitude DECIMAL(10, 8) NOT NULL,
         longitude DECIMAL(11, 8) NOT NULL,
-        time_zone VARCHAR(50),
+        related_locations JSONB,
+        directions JSONB,
+        time_zone VARCHAR(255) NOT NULL DEFAULT 'Europe/Berlin',
         operator_name VARCHAR(255),
-        charging_when_closed BOOLEAN DEFAULT FALSE,
+        operator_website VARCHAR(255),
+        operator_logo VARCHAR(255),
+        suboperator_name VARCHAR(255),
+        suboperator_website VARCHAR(255),
+        owner_name VARCHAR(255),
+        owner_website VARCHAR(255),
+        charging_when_closed BOOLEAN DEFAULT TRUE,
         facilities JSONB,
+        opening_times JSONB,
+        images JSONB,
+        energy_mix JSONB,
         last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    // Add facilities column if missing
-    await pool.query(`
-      ALTER TABLE locations ADD COLUMN IF NOT EXISTS facilities JSONB
-    `).catch(() => {});
+    // Add missing location columns (OCPI 2.2.1 compliance)
+    await pool.query(`ALTER TABLE locations ADD COLUMN IF NOT EXISTS facilities JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE locations ADD COLUMN IF NOT EXISTS country_code VARCHAR(2) DEFAULT 'DE'`).catch(() => {});
+    await pool.query(`ALTER TABLE locations ADD COLUMN IF NOT EXISTS party_id VARCHAR(3) DEFAULT 'VEC'`).catch(() => {});
+    await pool.query(`ALTER TABLE locations ADD COLUMN IF NOT EXISTS publish BOOLEAN DEFAULT TRUE`).catch(() => {});
+    await pool.query(`ALTER TABLE locations ADD COLUMN IF NOT EXISTS publish_allowed_to JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE locations ADD COLUMN IF NOT EXISTS state VARCHAR(20)`).catch(() => {});
+    await pool.query(`ALTER TABLE locations ADD COLUMN IF NOT EXISTS related_locations JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE locations ADD COLUMN IF NOT EXISTS directions JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE locations ADD COLUMN IF NOT EXISTS operator_website VARCHAR(255)`).catch(() => {});
+    await pool.query(`ALTER TABLE locations ADD COLUMN IF NOT EXISTS operator_logo VARCHAR(255)`).catch(() => {});
+    await pool.query(`ALTER TABLE locations ADD COLUMN IF NOT EXISTS suboperator_name VARCHAR(255)`).catch(() => {});
+    await pool.query(`ALTER TABLE locations ADD COLUMN IF NOT EXISTS suboperator_website VARCHAR(255)`).catch(() => {});
+    await pool.query(`ALTER TABLE locations ADD COLUMN IF NOT EXISTS owner_name VARCHAR(255)`).catch(() => {});
+    await pool.query(`ALTER TABLE locations ADD COLUMN IF NOT EXISTS owner_website VARCHAR(255)`).catch(() => {});
+    await pool.query(`ALTER TABLE locations ADD COLUMN IF NOT EXISTS opening_times JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE locations ADD COLUMN IF NOT EXISTS images JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE locations ADD COLUMN IF NOT EXISTS energy_mix JSONB`).catch(() => {});
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS tariffs (
@@ -161,34 +191,62 @@ export const runMigrations = async () => {
       CREATE TABLE IF NOT EXISTS evses (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         location_id UUID NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
-        uid VARCHAR(255) NOT NULL,
-        evse_id VARCHAR(255) NOT NULL UNIQUE,
+        uid VARCHAR(36) NOT NULL,
+        evse_id VARCHAR(48),
         status VARCHAR(50) NOT NULL DEFAULT 'AVAILABLE',
-        floor_level VARCHAR(10),
-        physical_reference VARCHAR(255),
+        status_schedule JSONB,
+        capabilities JSONB,
+        floor_level VARCHAR(4),
+        latitude DECIMAL(10, 8),
+        longitude DECIMAL(11, 8),
+        physical_reference VARCHAR(16),
+        directions JSONB,
+        parking_restrictions JSONB,
+        images JSONB,
         last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(location_id, uid)
       )
     `);
+
+    // Add missing EVSE columns
+    await pool.query(`ALTER TABLE evses ADD COLUMN IF NOT EXISTS status_schedule JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE evses ADD COLUMN IF NOT EXISTS capabilities JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE evses ADD COLUMN IF NOT EXISTS latitude DECIMAL(10, 8)`).catch(() => {});
+    await pool.query(`ALTER TABLE evses ADD COLUMN IF NOT EXISTS longitude DECIMAL(11, 8)`).catch(() => {});
+    await pool.query(`ALTER TABLE evses ADD COLUMN IF NOT EXISTS directions JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE evses ADD COLUMN IF NOT EXISTS parking_restrictions JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE evses ADD COLUMN IF NOT EXISTS images JSONB`).catch(() => {});
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS connectors (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         evse_id UUID NOT NULL REFERENCES evses(id) ON DELETE CASCADE,
-        connector_id VARCHAR(255) NOT NULL,
+        connector_id VARCHAR(36) NOT NULL,
         standard VARCHAR(50) NOT NULL,
         format VARCHAR(20) NOT NULL,
-        power_type VARCHAR(50) NOT NULL,
-        voltage INTEGER NOT NULL,
-        amperage INTEGER NOT NULL,
-        power_kw DECIMAL(6, 2),
-        status VARCHAR(50) NOT NULL DEFAULT 'AVAILABLE',
-        tariff_id VARCHAR(255),
+        power_type VARCHAR(20) NOT NULL,
+        max_voltage INTEGER NOT NULL,
+        max_amperage INTEGER NOT NULL,
+        max_electric_power INTEGER,
+        tariff_ids JSONB,
+        terms_and_conditions VARCHAR(255),
         last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(evse_id, connector_id)
       )
     `);
+
+    // Rename voltage/amperage to max_voltage/max_amperage and add new columns
+    await pool.query(`ALTER TABLE connectors RENAME COLUMN voltage TO max_voltage`).catch(() => {});
+    await pool.query(`ALTER TABLE connectors RENAME COLUMN amperage TO max_amperage`).catch(() => {});
+    await pool.query(`ALTER TABLE connectors ADD COLUMN IF NOT EXISTS max_voltage INTEGER`).catch(() => {});
+    await pool.query(`ALTER TABLE connectors ADD COLUMN IF NOT EXISTS max_amperage INTEGER`).catch(() => {});
+    await pool.query(`ALTER TABLE connectors ADD COLUMN IF NOT EXISTS max_electric_power INTEGER`).catch(() => {});
+    await pool.query(`ALTER TABLE connectors ADD COLUMN IF NOT EXISTS tariff_ids JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE connectors ADD COLUMN IF NOT EXISTS terms_and_conditions VARCHAR(255)`).catch(() => {});
+    await pool.query(`ALTER TABLE connectors DROP COLUMN IF EXISTS status`).catch(() => {});
+    await pool.query(`ALTER TABLE connectors DROP COLUMN IF EXISTS power_kw`).catch(() => {});
 
     // Add tariff_id column if missing
     await pool.query(`ALTER TABLE connectors ADD COLUMN IF NOT EXISTS tariff_id VARCHAR(255)`).catch(() => {});
