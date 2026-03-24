@@ -32,11 +32,16 @@ export function Dashboard({ apiBase }: Props) {
 
   const fetchData = async () => {
     setLoading(true);
+    setError(''); // Clear previous errors
     try {
       const [statusRes, statsRes] = await Promise.all([
-        fetch(`${apiBase}/admin/status`),
-        fetch(`${apiBase}/admin/logs-stats?hours=24`),
+        fetch(`${apiBase}/admin/status`, { cache: 'no-store' }),
+        fetch(`${apiBase}/admin/logs-stats?hours=24`, { cache: 'no-store' }),
       ]);
+
+      if (!statusRes.ok || !statsRes.ok) {
+        throw new Error(`API error: status=${statusRes.status}, logs-stats=${statsRes.status}`);
+      }
 
       const statusData = await statusRes.json();
       const statsData = await statsRes.json();

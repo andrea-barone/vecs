@@ -46,8 +46,8 @@ app.get('/', (req: Request, res: Response) => {
   });
 });
 
-// Error handling middleware
-app.use((err: any, req: Request, res: Response) => {
+// Error handling middleware (requires 4 params to be recognized as error handler)
+app.use((err: any, req: Request, res: Response, next: Function) => {
   console.error('Unhandled error:', err);
   res.status(500).json({
     data: null,
