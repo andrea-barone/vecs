@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import './App.css';
-import { CredentialsForm } from './components/CredentialsForm';
 import { LocationList } from './components/LocationList';
 import { LocationForm } from './components/LocationForm';
 import { EVSEForm } from './components/EVSEForm';
@@ -87,13 +86,6 @@ export function App() {
     }
   }, [appMode, token]);
 
-  const handleCredentialsCreated = (newToken: string) => {
-    setToken(newToken);
-    localStorage.setItem('ocpi_token', newToken);
-    setAppMode('emsp');
-    setActiveTab('locations');
-  };
-
   const handleAdminModeEntered = () => {
     setAdminMode(true);
     setAppMode('admin');
@@ -121,56 +113,39 @@ export function App() {
 
   return (
     <div className="app">
-      <header className="header">
-        <h1>🔌 VECS</h1>
-        <p className="subtitle">Virtual Electric Charging Station Simulator</p>
-        {appMode === 'emsp' && token && (
-          <div className="auth-status">
-            <span className="token-badge">eMSP: {token.substring(0, 20)}...</span>
-            <button onClick={handleLogout} className="logout-btn">
-              Logout
-            </button>
-          </div>
-        )}
-        {appMode === 'admin' && (
-          <div className="auth-status">
-            <span className="token-badge">🔧 Admin Mode</span>
-            <button onClick={handleExitAdmin} className="logout-btn">
-              Exit Admin
-            </button>
-          </div>
-        )}
-      </header>
+      {/* Header - only show when in admin or emsp mode */}
+      {appMode !== 'welcome' && (
+        <header className="header">
+          <h1>⚡ VECS</h1>
+          <p className="subtitle">Virtual Electric Charging Station Simulator</p>
+          {appMode === 'emsp' && token && (
+            <div className="auth-status">
+              <span className="token-badge">eMSP: {token.substring(0, 20)}...</span>
+              <button onClick={handleLogout} className="logout-btn">
+                Logout
+              </button>
+            </div>
+          )}
+          {appMode === 'admin' && (
+            <div className="auth-status">
+              <span className="token-badge">🔧 Admin Mode</span>
+              <button onClick={handleExitAdmin} className="logout-btn">
+                Exit Admin
+              </button>
+            </div>
+          )}
+        </header>
+      )}
 
       {/* Welcome Screen */}
       {appMode === 'welcome' && (
-        <div className="container">
-          <div className="welcome-grid">
-            <div className="welcome-card" onClick={() => setAppMode('admin')}>
-              <div className="welcome-icon">🔧</div>
-              <h2>Admin Setup</h2>
-              <p>Configure your virtual CPO</p>
-              <ul>
-                <li>Create charging locations</li>
-                <li>Add EVSEs & connectors</li>
-                <li>Set up your network</li>
-                <li>Then let eMSPs connect</li>
-              </ul>
-              <button className="btn btn-primary">Enter Admin Mode →</button>
-            </div>
-
-            <div className="welcome-card" onClick={() => setAppMode('emsp')}>
-              <div className="welcome-icon">🚗</div>
-              <h2>eMSP Connection</h2>
-              <p>Connect as Mobility Provider</p>
-              <ul>
-                <li>Register your eMSP</li>
-                <li>Get API credentials</li>
-                <li>Access charging network</li>
-                <li>Manage your fleet</li>
-              </ul>
-              <button className="btn btn-secondary">Register eMSP →</button>
-            </div>
+        <div className="welcome-container">
+          <div className="welcome-card-centered" onClick={() => setAppMode('admin')}>
+            <div className="welcome-icon">⚡</div>
+            <h2>VECS Admin</h2>
+            <p>Virtual Electric Charging Station Simulator</p>
+            <p className="welcome-subtitle">OCPI 2.2.1 CPO for testing eMSP integrations</p>
+            <button className="btn btn-primary btn-large">Enter Dashboard →</button>
           </div>
         </div>
       )}
@@ -319,72 +294,6 @@ export function App() {
         </>
       )}
 
-      {/* eMSP Mode */}
-      {appMode === 'emsp' && (
-        <div className="container">
-          {!token ? (
-            <CredentialsForm apiBase={API_BASE} onCredentialsCreated={handleCredentialsCreated} />
-          ) : (
-            <>
-              <nav className="tabs">
-                <button
-                  className={`tab ${activeTab === 'locations' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('locations')}
-                >
-                  📍 Locations
-                </button>
-                <button
-                  className={`tab ${activeTab === 'create' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('create')}
-                >
-                  ➕ Create
-                </button>
-              </nav>
-
-              {activeTab === 'locations' && (
-                <section className="section">
-                  <div className="section-header">
-                    <h2>Charging Locations</h2>
-                    <button onClick={fetchLocations} disabled={loading} className="refresh-btn">
-                      {loading ? '🔄 Loading...' : '🔄 Refresh'}
-                    </button>
-                  </div>
-                  {error && <div className="error">{error}</div>}
-                  <LocationList
-                    locations={locations}
-                    apiBase={API_BASE}
-                    token={token}
-                    selectedLocation={selectedLocation}
-                    onSelectLocation={setSelectedLocation}
-                    onLocationUpdated={fetchLocations}
-                  />
-                </section>
-              )}
-
-              {activeTab === 'create' && (
-                <section className="section">
-                  <h2>Create New Location</h2>
-                  <LocationForm apiBase={API_BASE} onLocationCreated={handleLocationCreated} />
-
-                  {selectedLocation && (
-                    <>
-                      <h3 style={{ marginTop: '2rem' }}>Add EVSE to {selectedLocation}</h3>
-                      <EVSEForm
-                        apiBase={API_BASE}
-                        locationId={selectedLocation}
-                        onEVSECreated={() => {
-                          fetchLocations();
-                          setSelectedLocation(null);
-                        }}
-                      />
-                    </>
-                  )}
-                </section>
-              )}
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 }

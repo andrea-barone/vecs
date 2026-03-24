@@ -72,21 +72,13 @@ body {
    ======================================== */
 
 .app {
-  display: flex;
   min-height: 100vh;
+  background: var(--color-bg-secondary);
 }
 
+/* Sidebar - hidden by default, can be enabled later */
 .sidebar {
-  width: 240px;
-  background: var(--color-bg-primary);
-  border-right: 1px solid var(--color-border);
-  display: flex;
-  flex-direction: column;
-  position: fixed;
-  top: 0;
-  left: 0;
-  height: 100vh;
-  z-index: 100;
+  display: none;
 }
 
 .sidebar-header {
@@ -228,7 +220,6 @@ body {
 /* Main Content Area */
 .main-content {
   flex: 1;
-  margin-left: 240px;
   min-height: 100vh;
 }
 
@@ -279,7 +270,55 @@ body {
 .welcome-container {
   min-height: 100vh;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--color-bg-secondary) 0%, var(--color-bg-tertiary) 100%);
+}
+
+.welcome-card-centered {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-2xl);
+  text-align: center;
+  max-width: 400px;
+  width: 100%;
+  box-shadow: var(--shadow-lg);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.welcome-card-centered:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 32px rgba(0, 17, 44, 0.15);
+}
+
+.welcome-card-centered .welcome-icon {
+  font-size: 48px;
+  margin-bottom: var(--space-md);
+}
+
+.welcome-card-centered h2 {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-xs);
+}
+
+.welcome-card-centered p {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  margin-bottom: var(--space-xs);
+}
+
+.welcome-card-centered .welcome-subtitle {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  margin-bottom: var(--space-lg);
+}
+
+.welcome-card-centered .btn {
+  margin-top: var(--space-md);
 }
 
 .welcome-header {
