@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import './App.css';
-import { LocationList } from './components/LocationList';
+import { LocationTable } from './components/LocationTable';
+import { LocationDetail } from './components/LocationDetail';
 import { LocationForm } from './components/LocationForm';
-import { EVSEForm } from './components/EVSEForm';
 import { AdminSetup } from './components/AdminSetup';
 import { TariffManager } from './components/TariffManager';
 import { LogViewer } from './components/LogViewer';
@@ -28,80 +28,59 @@ interface Location {
   last_updated?: string;
 }
 
-type AppMode = 'welcome' | 'admin' | 'emsp';
+type AppMode = 'welcome' | 'admin';
+type LocationView = 'list' | 'detail' | 'create';
 
 export function App() {
   const [appMode, setAppMode] = useState<AppMode>('welcome');
-  const [token, setToken] = useState<string>(localStorage.getItem('ocpi_token') || '');
   const [adminMode, setAdminMode] = useState<boolean>(localStorage.getItem('admin_mode') === 'true');
   const [locations, setLocations] = useState<Location[]>([]);
-  const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'locations' | 'create' | 'tariffs' | 'sessions' | 'tokens' | 'emsps' | 'logs'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'locations' | 'tariffs' | 'sessions' | 'tokens' | 'emsps' | 'logs'>('dashboard');
+  
+  // Location detail view state
+  const [locationView, setLocationView] = useState<LocationView>('list');
+  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
 
-  // Use relative paths for API calls (works through nginx proxy in Docker)
-  // Falls back to VITE_API_URL for dev server with proxy setup
   const API_BASE = import.meta.env.VITE_API_URL || '';
 
-  // Initialize mode on load
   useEffect(() => {
     if (adminMode) {
       setAppMode('admin');
-    } else if (token) {
-      setAppMode('emsp');
     }
-  }, [adminMode, token]);
+  }, [adminMode]);
 
-  // Fetch locations (works for both admin and eMSP)
   const fetchLocations = async () => {
-    setLoading(true);
     setError('');
     try {
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
-      // Add token if we have one (eMSP mode)
-      if (token) {
-        headers['Authorization'] = `Token ${token}`;
-      }
-
-      const response = await fetch(`${API_BASE}/ocpi/2.2.1/locations`, { headers });
+      const response = await fetch(`${API_BASE}/ocpi/2.2.1/locations`, { cache: 'no-store' });
       const data = await response.json();
       if (data.status_code === 1000) {
-        setLocations(Array.isArray(data.data) ? data.data : [data.data]);
+        const locs = Array.isArray(data.data) ? data.data : [data.data];
+        setLocations(locs);
+        // Update selected location if it exists
+        if (selectedLocation) {
+          const updated = locs.find((l: Location) => l.id === selectedLocation.id);
+          if (updated) setSelectedLocation(updated);
+        }
       } else {
         setError(data.status_message || 'Failed to fetch locations');
       }
     } catch (err) {
       setError(`Error: ${err}`);
-    } finally {
-      setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (appMode === 'admin' || appMode === 'emsp') {
+    if (appMode === 'admin' && adminMode) {
       fetchLocations();
     }
-  }, [appMode, token]);
+  }, [appMode, adminMode]);
 
   const handleAdminModeEntered = () => {
     setAdminMode(true);
     setAppMode('admin');
     fetchLocations();
-  };
-
-  const handleLocationCreated = () => {
-    fetchLocations();
-    setActiveTab('locations');
-  };
-
-  const handleLogout = () => {
-    setToken('');
-    localStorage.removeItem('ocpi_token');
-    setLocations([]);
-    setAppMode('welcome');
   };
 
   const handleExitAdmin = () => {
@@ -111,29 +90,34 @@ export function App() {
     setAppMode('welcome');
   };
 
+  const handleSelectLocation = (location: Location) => {
+    setSelectedLocation(location);
+    setLocationView('detail');
+  };
+
+  const handleBackToList = () => {
+    setSelectedLocation(null);
+    setLocationView('list');
+  };
+
+  const handleLocationCreated = () => {
+    fetchLocations();
+    setLocationView('list');
+  };
+
   return (
     <div className="app">
-      {/* Header - only show when in admin or emsp mode */}
-      {appMode !== 'welcome' && (
+      {/* Header - only show when in admin mode */}
+      {appMode === 'admin' && adminMode && (
         <header className="header">
           <h1>⚡ VECS</h1>
           <p className="subtitle">Virtual Electric Charging Station Simulator</p>
-          {appMode === 'emsp' && token && (
-            <div className="auth-status">
-              <span className="token-badge">eMSP: {token.substring(0, 20)}...</span>
-              <button onClick={handleLogout} className="logout-btn">
-                Logout
-              </button>
-            </div>
-          )}
-          {appMode === 'admin' && (
-            <div className="auth-status">
-              <span className="token-badge">🔧 Admin Mode</span>
-              <button onClick={handleExitAdmin} className="logout-btn">
-                Exit Admin
-              </button>
-            </div>
-          )}
+          <div className="auth-status">
+            <span className="token-badge">Admin Mode</span>
+            <button onClick={handleExitAdmin} className="logout-btn">
+              Exit
+            </button>
+          </div>
         </header>
       )}
 
@@ -164,49 +148,43 @@ export function App() {
                   className={`tab ${activeTab === 'dashboard' ? 'active' : ''}`}
                   onClick={() => setActiveTab('dashboard')}
                 >
-                  📊 Dashboard
+                  Dashboard
                 </button>
                 <button
                   className={`tab ${activeTab === 'locations' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('locations')}
+                  onClick={() => { setActiveTab('locations'); setLocationView('list'); }}
                 >
-                  📍 Locations
-                </button>
-                <button
-                  className={`tab ${activeTab === 'create' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('create')}
-                >
-                  ➕ Create
+                  Locations
                 </button>
                 <button
                   className={`tab ${activeTab === 'tariffs' ? 'active' : ''}`}
                   onClick={() => setActiveTab('tariffs')}
                 >
-                  💰 Tariffs
+                  Tariffs
                 </button>
                 <button
                   className={`tab ${activeTab === 'sessions' ? 'active' : ''}`}
                   onClick={() => setActiveTab('sessions')}
                 >
-                  ⚡ Sessions
+                  Sessions
                 </button>
                 <button
                   className={`tab ${activeTab === 'tokens' ? 'active' : ''}`}
                   onClick={() => setActiveTab('tokens')}
                 >
-                  🔑 Tokens
+                  Tokens
                 </button>
                 <button
                   className={`tab ${activeTab === 'emsps' ? 'active' : ''}`}
                   onClick={() => setActiveTab('emsps')}
                 >
-                  🏢 eMSPs
+                  eMSPs
                 </button>
                 <button
                   className={`tab ${activeTab === 'logs' ? 'active' : ''}`}
                   onClick={() => setActiveTab('logs')}
                 >
-                  📋 Logs
+                  Logs
                 </button>
               </nav>
 
@@ -251,41 +229,37 @@ export function App() {
 
               {activeTab === 'locations' && (
                 <section className="section">
-                  <div className="section-header">
-                    <h2>Charging Locations</h2>
-                    <button onClick={fetchLocations} disabled={loading} className="refresh-btn">
-                      {loading ? '🔄 Loading...' : '🔄 Refresh'}
-                    </button>
-                  </div>
                   {error && <div className="error">{error}</div>}
-                  <LocationList
-                    locations={locations}
-                    apiBase={API_BASE}
-                    token={token}
-                    selectedLocation={selectedLocation}
-                    onSelectLocation={setSelectedLocation}
-                    onLocationUpdated={fetchLocations}
-                  />
-                </section>
-              )}
+                  
+                  {locationView === 'list' && (
+                    <LocationTable
+                      locations={locations}
+                      onSelectLocation={handleSelectLocation}
+                      onCreateNew={() => setLocationView('create')}
+                    />
+                  )}
 
-              {activeTab === 'create' && (
-                <section className="section">
-                  <h2>Create New Location</h2>
-                  <LocationForm apiBase={API_BASE} onLocationCreated={handleLocationCreated} />
+                  {locationView === 'detail' && selectedLocation && (
+                    <LocationDetail
+                      location={selectedLocation}
+                      apiBase={API_BASE}
+                      onBack={handleBackToList}
+                      onLocationUpdated={fetchLocations}
+                    />
+                  )}
 
-                  {selectedLocation && (
-                    <>
-                      <h3 style={{ marginTop: '2rem' }}>Add EVSE to {selectedLocation}</h3>
-                      <EVSEForm
-                        apiBase={API_BASE}
-                        locationId={selectedLocation}
-                        onEVSECreated={() => {
-                          fetchLocations();
-                          setSelectedLocation(null);
-                        }}
-                      />
-                    </>
+                  {locationView === 'create' && (
+                    <div className="detail-page">
+                      <div className="detail-header">
+                        <button className="btn btn-secondary" onClick={() => setLocationView('list')}>← Back</button>
+                        <div className="detail-title">
+                          <h2>Create Location</h2>
+                        </div>
+                      </div>
+                      <div className="detail-content">
+                        <LocationForm apiBase={API_BASE} onLocationCreated={handleLocationCreated} />
+                      </div>
+                    </div>
                   )}
                 </section>
               )}
@@ -293,7 +267,6 @@ export function App() {
           )}
         </>
       )}
-
     </div>
   );
 }
