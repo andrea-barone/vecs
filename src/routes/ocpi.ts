@@ -315,16 +315,23 @@ router.get('/tariffs/:tariff_id', async (req: AuthRequest, res: Response) => {
 
 router.post('/tariffs', async (req: AuthRequest, res: Response) => {
   try {
-    const { tariff_id, currency, type, elements, display_text, min_price, max_price } = req.body;
+    const { 
+      tariff_id, country_code, party_id, currency, type,
+      tariff_alt_text, tariff_alt_url, min_price, max_price,
+      preauthorize_amount, elements, tax_included,
+      start_date_time, end_date_time, energy_mix
+    } = req.body;
 
-    if (!tariff_id || !currency || !type) {
-      return ocpiResponse(null, 3000, 'Missing required fields: tariff_id, currency, type', res);
+    if (!tariff_id || !currency) {
+      return ocpiResponse(null, 3000, 'Missing required fields: tariff_id, currency', res);
     }
 
     const tariff = await tariffsService.createTariff({
-      tariff_id, currency, type,
-      elements: elements || [],
-      display_text, min_price, max_price,
+      tariff_id, country_code, party_id, currency, type,
+      tariff_alt_text, tariff_alt_url, min_price, max_price,
+      preauthorize_amount, elements: elements || [],
+      tax_included: tax_included || 'YES',
+      start_date_time, end_date_time, energy_mix,
     });
 
     ocpiResponse(tariff, 1001, 'Tariff created successfully', res);

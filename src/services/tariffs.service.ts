@@ -1,23 +1,49 @@
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../database/migrations';
 
+interface PriceLimit {
+  before_taxes: number;
+  after_taxes?: number;
+}
+
+interface DisplayText {
+  language: string;
+  text: string;
+}
+
 interface CreateTariffInput {
   tariff_id: string;
+  country_code?: string;
+  party_id?: string;
   currency: string;
-  type: string;
+  type?: string;
+  tariff_alt_text?: DisplayText[];
+  tariff_alt_url?: string;
+  min_price?: PriceLimit;
+  max_price?: PriceLimit;
+  preauthorize_amount?: number;
   elements: any[];
-  display_text?: string;
-  min_price?: number;
-  max_price?: number;
+  tax_included?: string;
+  start_date_time?: Date;
+  end_date_time?: Date;
+  energy_mix?: any;
 }
 
 interface UpdateTariffInput {
+  country_code?: string;
+  party_id?: string;
   currency?: string;
   type?: string;
+  tariff_alt_text?: DisplayText[];
+  tariff_alt_url?: string;
+  min_price?: PriceLimit;
+  max_price?: PriceLimit;
+  preauthorize_amount?: number;
   elements?: any[];
-  display_text?: string;
-  min_price?: number;
-  max_price?: number;
+  tax_included?: string;
+  start_date_time?: Date;
+  end_date_time?: Date;
+  energy_mix?: any;
 }
 
 export class TariffsService {
@@ -27,19 +53,29 @@ export class TariffsService {
 
     const result = await pool.query(
       `INSERT INTO tariffs (
-        id, tariff_id, currency, type, elements, display_text, 
-        min_price, max_price, last_updated
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        id, tariff_id, country_code, party_id, currency, type,
+        tariff_alt_text, tariff_alt_url, min_price, max_price,
+        preauthorize_amount, elements, tax_included,
+        start_date_time, end_date_time, energy_mix, last_updated
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING *`,
       [
         dbId,
         input.tariff_id,
+        input.country_code || 'DE',
+        input.party_id || 'VEC',
         input.currency,
-        input.type,
+        input.type || null,
+        input.tariff_alt_text ? JSON.stringify(input.tariff_alt_text) : null,
+        input.tariff_alt_url || null,
+        input.min_price ? JSON.stringify(input.min_price) : null,
+        input.max_price ? JSON.stringify(input.max_price) : null,
+        input.preauthorize_amount || null,
         JSON.stringify(input.elements),
-        input.display_text || null,
-        input.min_price || null,
-        input.max_price || null,
+        input.tax_included || 'YES',
+        input.start_date_time || null,
+        input.end_date_time || null,
+        input.energy_mix ? JSON.stringify(input.energy_mix) : null,
         now,
       ]
     );
@@ -67,29 +103,28 @@ export class TariffsService {
     const values: any[] = [];
     let paramIndex = 1;
 
-    if (input.currency !== undefined) {
-      updates.push(`currency = $${paramIndex++}`);
-      values.push(input.currency);
-    }
-    if (input.type !== undefined) {
-      updates.push(`type = $${paramIndex++}`);
-      values.push(input.type);
-    }
-    if (input.elements !== undefined) {
-      updates.push(`elements = $${paramIndex++}`);
-      values.push(JSON.stringify(input.elements));
-    }
-    if (input.display_text !== undefined) {
-      updates.push(`display_text = $${paramIndex++}`);
-      values.push(input.display_text);
-    }
-    if (input.min_price !== undefined) {
-      updates.push(`min_price = $${paramIndex++}`);
-      values.push(input.min_price);
-    }
-    if (input.max_price !== undefined) {
-      updates.push(`max_price = $${paramIndex++}`);
-      values.push(input.max_price);
+    const fields: [keyof UpdateTariffInput, string, boolean][] = [
+      ['country_code', 'country_code', false],
+      ['party_id', 'party_id', false],
+      ['currency', 'currency', false],
+      ['type', 'type', false],
+      ['tariff_alt_text', 'tariff_alt_text', true],
+      ['tariff_alt_url', 'tariff_alt_url', false],
+      ['min_price', 'min_price', true],
+      ['max_price', 'max_price', true],
+      ['preauthorize_amount', 'preauthorize_amount', false],
+      ['elements', 'elements', true],
+      ['tax_included', 'tax_included', false],
+      ['start_date_time', 'start_date_time', false],
+      ['end_date_time', 'end_date_time', false],
+      ['energy_mix', 'energy_mix', true],
+    ];
+
+    for (const [key, col, isJson] of fields) {
+      if (input[key] !== undefined) {
+        updates.push(`${col} = $${paramIndex++}`);
+        values.push(isJson ? JSON.stringify(input[key]) : input[key]);
+      }
     }
 
     if (updates.length === 0) return null;
@@ -115,15 +150,31 @@ export class TariffsService {
     return (result.rowCount ?? 0) > 0;
   }
 
+  private parseJson(val: any): any {
+    if (!val) return undefined;
+    if (typeof val === 'string') {
+      try { return JSON.parse(val); } catch { return val; }
+    }
+    return val;
+  }
+
   private rowToTariff(row: any) {
     return {
+      country_code: row.country_code || 'DE',
+      party_id: row.party_id || 'VEC',
       id: row.tariff_id,
       currency: row.currency,
-      type: row.type,
-      elements: typeof row.elements === 'string' ? JSON.parse(row.elements) : row.elements,
-      display_text: row.display_text,
-      min_price: row.min_price ? parseFloat(row.min_price) : undefined,
-      max_price: row.max_price ? parseFloat(row.max_price) : undefined,
+      type: row.type || undefined,
+      tariff_alt_text: this.parseJson(row.tariff_alt_text),
+      tariff_alt_url: row.tariff_alt_url || undefined,
+      min_price: this.parseJson(row.min_price),
+      max_price: this.parseJson(row.max_price),
+      preauthorize_amount: row.preauthorize_amount ? parseFloat(row.preauthorize_amount) : undefined,
+      elements: this.parseJson(row.elements) || [],
+      tax_included: row.tax_included || 'YES',
+      start_date_time: row.start_date_time || undefined,
+      end_date_time: row.end_date_time || undefined,
+      energy_mix: this.parseJson(row.energy_mix),
       last_updated: row.last_updated,
     };
   }

@@ -168,24 +168,36 @@ export const runMigrations = async () => {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS tariffs (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        tariff_id VARCHAR(255) NOT NULL UNIQUE,
+        tariff_id VARCHAR(36) NOT NULL UNIQUE,
+        country_code VARCHAR(2) NOT NULL DEFAULT 'DE',
+        party_id VARCHAR(3) NOT NULL DEFAULT 'VEC',
         currency VARCHAR(3) NOT NULL,
-        type VARCHAR(50) NOT NULL,
-        display_text TEXT,
-        min_price DECIMAL(10, 4),
-        max_price DECIMAL(10, 4),
+        type VARCHAR(50),
+        tariff_alt_text JSONB,
+        tariff_alt_url VARCHAR(255),
+        min_price JSONB,
+        max_price JSONB,
+        preauthorize_amount DECIMAL(10, 4),
+        elements JSONB NOT NULL DEFAULT '[]',
+        tax_included VARCHAR(20) NOT NULL DEFAULT 'YES',
         start_date_time TIMESTAMP,
         end_date_time TIMESTAMP,
-        elements JSONB NOT NULL DEFAULT '[]',
+        energy_mix JSONB,
         last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    // Add new tariff columns if missing
-    await pool.query(`ALTER TABLE tariffs ADD COLUMN IF NOT EXISTS display_text TEXT`).catch(() => {});
-    await pool.query(`ALTER TABLE tariffs ADD COLUMN IF NOT EXISTS min_price DECIMAL(10, 4)`).catch(() => {});
-    await pool.query(`ALTER TABLE tariffs ADD COLUMN IF NOT EXISTS max_price DECIMAL(10, 4)`).catch(() => {});
+    // Add missing tariff columns (OCPI 2.2.1 compliance)
+    await pool.query(`ALTER TABLE tariffs ADD COLUMN IF NOT EXISTS country_code VARCHAR(2) DEFAULT 'DE'`).catch(() => {});
+    await pool.query(`ALTER TABLE tariffs ADD COLUMN IF NOT EXISTS party_id VARCHAR(3) DEFAULT 'VEC'`).catch(() => {});
+    await pool.query(`ALTER TABLE tariffs ADD COLUMN IF NOT EXISTS tariff_alt_text JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE tariffs ADD COLUMN IF NOT EXISTS tariff_alt_url VARCHAR(255)`).catch(() => {});
+    await pool.query(`ALTER TABLE tariffs ADD COLUMN IF NOT EXISTS preauthorize_amount DECIMAL(10, 4)`).catch(() => {});
+    await pool.query(`ALTER TABLE tariffs ADD COLUMN IF NOT EXISTS tax_included VARCHAR(20) DEFAULT 'YES'`).catch(() => {});
+    await pool.query(`ALTER TABLE tariffs ADD COLUMN IF NOT EXISTS energy_mix JSONB`).catch(() => {});
+    // Convert min_price/max_price from DECIMAL to JSONB if needed
+    await pool.query(`ALTER TABLE tariffs DROP COLUMN IF EXISTS display_text`).catch(() => {});
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS evses (
