@@ -2,9 +2,9 @@ import { Router, Response } from 'express';
 import { credentialsService } from '../services/credentials.service';
 import { locationsService } from '../services/locations.service';
 import { tariffsService } from '../services/tariffs.service';
-import { sessionsService } from '../services/sessions.service';
+import { sessionsService, SessionStatus } from '../services/sessions.service';
 import { cdrsService } from '../services/cdrs.service';
-import { tokensService } from '../services/tokens.service';
+import { tokensService, TokenType } from '../services/tokens.service';
 import { commandsService } from '../services/commands.service';
 import { ocpiAuth, AuthRequest } from '../middleware/auth';
 
@@ -318,8 +318,7 @@ router.post('/tariffs', async (req: AuthRequest, res: Response) => {
     const { 
       tariff_id, country_code, party_id, currency, type,
       tariff_alt_text, tariff_alt_url, min_price, max_price,
-      preauthorize_amount, elements, tax_included,
-      start_date_time, end_date_time, energy_mix
+      elements, start_date_time, end_date_time, energy_mix
     } = req.body;
 
     if (!tariff_id || !currency) {
@@ -329,8 +328,7 @@ router.post('/tariffs', async (req: AuthRequest, res: Response) => {
     const tariff = await tariffsService.createTariff({
       tariff_id, country_code, party_id, currency, type,
       tariff_alt_text, tariff_alt_url, min_price, max_price,
-      preauthorize_amount, elements: elements || [],
-      tax_included: tax_included || 'YES',
+      elements: elements || [],
       start_date_time, end_date_time, energy_mix,
     });
 
@@ -379,9 +377,9 @@ router.delete('/tariffs/:tariff_id', async (req: AuthRequest, res: Response) => 
 router.get('/sessions', async (req: AuthRequest, res: Response) => {
   try {
     const filters = {
-      status: req.query.status as string | undefined,
+      status: req.query.status as SessionStatus | undefined,
       location_id: req.query.location_id as string | undefined,
-      auth_id: req.query.auth_id as string | undefined,
+      token_uid: req.query.token_uid as string | undefined,
       limit: req.query.limit ? parseInt(req.query.limit as string) : 100,
       offset: req.query.offset ? parseInt(req.query.offset as string) : 0,
     };
@@ -398,6 +396,25 @@ router.get('/sessions', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// OCPI 2.2.1 compliant path: /sessions/:country_code/:party_id/:session_id
+router.get('/sessions/:country_code/:party_id/:session_id', async (req: AuthRequest, res: Response) => {
+  try {
+    const country_code = Array.isArray(req.params.country_code) ? req.params.country_code[0] : req.params.country_code;
+    const party_id = Array.isArray(req.params.party_id) ? req.params.party_id[0] : req.params.party_id;
+    const session_id = Array.isArray(req.params.session_id) ? req.params.session_id[0] : req.params.session_id;
+    
+    const session = await sessionsService.getSessionByOcpiId(country_code, party_id, session_id);
+    if (!session) {
+      return ocpiResponse(null, 2004, `Session ${country_code}/${party_id}/${session_id} not found`, res);
+    }
+    ocpiResponse(session, 1000, 'Session retrieved successfully', res);
+  } catch (err) {
+    console.error('Error getting session:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+// Legacy path (backward compatible)
 router.get('/sessions/:session_id', async (req: AuthRequest, res: Response) => {
   try {
     const session_id = Array.isArray(req.params.session_id) ? req.params.session_id[0] : req.params.session_id;
@@ -456,6 +473,25 @@ router.get('/cdrs', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// OCPI 2.2.1 compliant path: /cdrs/:country_code/:party_id/:cdr_id
+router.get('/cdrs/:country_code/:party_id/:cdr_id', async (req: AuthRequest, res: Response) => {
+  try {
+    const country_code = Array.isArray(req.params.country_code) ? req.params.country_code[0] : req.params.country_code;
+    const party_id = Array.isArray(req.params.party_id) ? req.params.party_id[0] : req.params.party_id;
+    const cdr_id = Array.isArray(req.params.cdr_id) ? req.params.cdr_id[0] : req.params.cdr_id;
+    
+    const cdr = await cdrsService.getCDRByOcpiId(country_code, party_id, cdr_id);
+    if (!cdr) {
+      return ocpiResponse(null, 2004, `CDR ${country_code}/${party_id}/${cdr_id} not found`, res);
+    }
+    ocpiResponse(cdr, 1000, 'CDR retrieved successfully', res);
+  } catch (err) {
+    console.error('Error getting CDR:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+// Legacy path (backward compatible)
 router.get('/cdrs/:cdr_id', async (req: AuthRequest, res: Response) => {
   try {
     const cdr_id = Array.isArray(req.params.cdr_id) ? req.params.cdr_id[0] : req.params.cdr_id;
@@ -477,7 +513,7 @@ router.get('/cdrs/:cdr_id', async (req: AuthRequest, res: Response) => {
 router.get('/tokens', async (req: AuthRequest, res: Response) => {
   try {
     const filters = {
-      type: req.query.type as string | undefined,
+      type: req.query.type as TokenType | undefined,
       issuer: req.query.issuer as string | undefined,
       valid: req.query.valid !== undefined ? req.query.valid === 'true' : undefined,
       limit: req.query.limit ? parseInt(req.query.limit as string) : 100,
@@ -527,28 +563,38 @@ router.post('/tokens/:token_uid/authorize', async (req: AuthRequest, res: Respon
   }
 });
 
-// PUT is used by eMSP to push token updates to CPO
-router.put('/tokens/:token_uid', async (req: AuthRequest, res: Response) => {
+// PUT is used by eMSP to push token updates to CPO (OCPI 2.2.1)
+router.put('/tokens/:country_code/:party_id/:token_uid', async (req: AuthRequest, res: Response) => {
   try {
+    const country_code = Array.isArray(req.params.country_code) ? req.params.country_code[0] : req.params.country_code;
+    const party_id = Array.isArray(req.params.party_id) ? req.params.party_id[0] : req.params.party_id;
     const token_uid = Array.isArray(req.params.token_uid) ? req.params.token_uid[0] : req.params.token_uid;
-    const { type, auth_id, visual_number, issuer, valid, whitelist, language } = req.body;
+    const { 
+      type, contract_id, visual_number, issuer, group_id,
+      valid, whitelist, language, default_profile_type, energy_contract 
+    } = req.body;
 
     // Check if token exists, if not create it
-    let token = await tokensService.getToken(token_uid);
+    let token = await tokensService.getTokenByOcpiId(country_code, party_id, token_uid);
     
     if (!token) {
-      if (!type || !auth_id || !issuer) {
-        return ocpiResponse(null, 3000, 'Missing required fields for new token', res);
+      if (!type || !contract_id || !issuer) {
+        return ocpiResponse(null, 3000, 'Missing required fields for new token: type, contract_id, issuer', res);
       }
       token = await tokensService.createToken({
+        country_code,
+        party_id,
         token_uid,
         type,
-        auth_id,
+        contract_id,
         visual_number,
         issuer,
+        group_id,
         valid,
         whitelist,
         language,
+        default_profile_type,
+        energy_contract,
       });
       return ocpiResponse(token, 1001, 'Token created successfully', res);
     }
@@ -556,12 +602,73 @@ router.put('/tokens/:token_uid', async (req: AuthRequest, res: Response) => {
     // Update existing token
     token = await tokensService.updateToken(token_uid, {
       type,
-      auth_id,
+      contract_id,
       visual_number,
       issuer,
+      group_id,
       valid,
       whitelist,
       language,
+      default_profile_type,
+      energy_contract,
+    });
+
+    ocpiResponse(token, 1000, 'Token updated successfully', res);
+  } catch (err) {
+    console.error('Error on PUT token:', err);
+    ocpiResponse(null, 2000, 'Internal server error', res);
+  }
+});
+
+// Legacy PUT endpoint (backward compatible)
+router.put('/tokens/:token_uid', async (req: AuthRequest, res: Response) => {
+  try {
+    const token_uid = Array.isArray(req.params.token_uid) ? req.params.token_uid[0] : req.params.token_uid;
+    const { 
+      country_code, party_id, type, contract_id, auth_id, // auth_id for backward compat
+      visual_number, issuer, group_id, valid, whitelist, language,
+      default_profile_type, energy_contract 
+    } = req.body;
+
+    const effectiveContractId = contract_id || auth_id;
+
+    // Check if token exists, if not create it
+    let token = await tokensService.getToken(token_uid);
+    
+    if (!token) {
+      if (!type || !effectiveContractId || !issuer) {
+        return ocpiResponse(null, 3000, 'Missing required fields for new token: type, contract_id, issuer', res);
+      }
+      token = await tokensService.createToken({
+        country_code: country_code || 'DE',
+        party_id: party_id || 'VEC',
+        token_uid,
+        type,
+        contract_id: effectiveContractId,
+        visual_number,
+        issuer,
+        group_id,
+        valid,
+        whitelist,
+        language,
+        default_profile_type,
+        energy_contract,
+      });
+      return ocpiResponse(token, 1001, 'Token created successfully', res);
+    }
+
+    // Update existing token
+    token = await tokensService.updateToken(token_uid, {
+      type,
+      contract_id: effectiveContractId,
+      visual_number,
+      issuer,
+      group_id,
+      valid,
+      whitelist,
+      language,
+      default_profile_type,
+      energy_contract,
     });
 
     ocpiResponse(token, 1000, 'Token updated successfully', res);

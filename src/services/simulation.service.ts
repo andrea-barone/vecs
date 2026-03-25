@@ -1,4 +1,4 @@
-import { sessionsService, Session, ChargingPeriod } from './sessions.service';
+import { sessionsService, Session, ChargingPeriod, CdrToken, Price } from './sessions.service';
 import { cdrsService, CDR } from './cdrs.service';
 import { logOutboundRequest } from '../middleware/requestLogger';
 import pool from '../database/migrations';
@@ -15,24 +15,40 @@ const activeSimulations: Map<string, SimulationState> = new Map();
 
 class SimulationService {
   /**
-   * Start a charging session simulation
+   * Start a charging session simulation (OCPI 2.2.1 compliant)
    */
   async startCharging(params: {
     location_id: string;
     evse_id: string;
     connector_id: string;
-    auth_id: string;
-    auth_method?: string;
+    // OCPI 2.2.1: Use cdr_token object instead of auth_id
+    token_uid: string;
+    token_type?: 'AD_HOC_USER' | 'APP_USER' | 'OTHER' | 'RFID';
+    contract_id?: string;
+    token_country_code?: string;
+    token_party_id?: string;
+    auth_method?: 'AUTH_REQUEST' | 'COMMAND' | 'WHITELIST';
+    authorization_reference?: string;
     power_kw?: number;
     auto_increment?: boolean;
   }): Promise<Session> {
+    // Build OCPI 2.2.1 CdrToken
+    const cdrToken: CdrToken = {
+      country_code: params.token_country_code || 'DE',
+      party_id: params.token_party_id || 'VEC',
+      uid: params.token_uid,
+      type: params.token_type || 'RFID',
+      contract_id: params.contract_id || params.token_uid,
+    };
+
     // Create the session
     const session = await sessionsService.createSession({
       location_id: params.location_id,
       evse_uid: params.evse_id,
       connector_id: params.connector_id,
-      auth_id: params.auth_id,
+      cdr_token: cdrToken,
       auth_method: params.auth_method || 'COMMAND',
+      authorization_reference: params.authorization_reference,
     });
 
     // If auto_increment is true, start automatic meter updates
@@ -41,7 +57,7 @@ class SimulationService {
       const kwhPerMinute = powerKw / 60; // kWh per minute
 
       const state: SimulationState = {
-        sessionId: session.session_id,
+        sessionId: session.id,
         kwh: 0,
         kwhPerMinute,
       };
@@ -50,13 +66,13 @@ class SimulationService {
       state.intervalId = setInterval(async () => {
         try {
           state.kwh += state.kwhPerMinute;
-          await this.updateMeterValue(session.session_id, state.kwh);
+          await this.updateMeterValue(session.id, state.kwh);
         } catch (err) {
           console.error('Auto-increment error:', err);
         }
       }, 60000);
 
-      activeSimulations.set(session.session_id, state);
+      activeSimulations.set(session.id, state);
     }
 
     return session;
@@ -130,9 +146,13 @@ class SimulationService {
     // Calculate final kWh
     const finalKwh = options.finalKwh ?? simState?.kwh ?? session.kwh;
 
-    // Calculate cost
+    // Calculate cost (OCPI 2.2.1: Price object with excl_vat/incl_vat)
     const pricePerKwh = options.pricePerKwh ?? 0.35; // Default €0.35/kWh
-    const totalCost = finalKwh * pricePerKwh;
+    const totalCostExclVat = finalKwh * pricePerKwh;
+    const totalCost: Price = {
+      excl_vat: Math.round(totalCostExclVat * 100) / 100,
+      incl_vat: Math.round(totalCostExclVat * 1.19 * 100) / 100, // 19% VAT
+    };
 
     // Stop the session
     const stoppedSession = await sessionsService.stopSession(sessionId, finalKwh, totalCost);
@@ -146,8 +166,8 @@ class SimulationService {
     if (options.generateCDR !== false) {
       cdr = await cdrsService.createCDRFromSession(
         sessionId,
-        totalCost,
-        totalCost * 1.19 // 19% VAT
+        totalCost.excl_vat,
+        totalCost.incl_vat
       ) || undefined;
     }
 
@@ -171,7 +191,9 @@ class SimulationService {
     location_id: string;
     evse_id: string;
     connector_id: string;
-    auth_id: string;
+    token_uid: string;
+    token_type?: 'AD_HOC_USER' | 'APP_USER' | 'OTHER' | 'RFID';
+    contract_id?: string;
     duration_minutes?: number;
     power_kw?: number;
   }): Promise<{ session: Session; cdr: CDR }> {
@@ -184,7 +206,9 @@ class SimulationService {
       location_id: params.location_id,
       evse_id: params.evse_id,
       connector_id: params.connector_id,
-      auth_id: params.auth_id,
+      token_uid: params.token_uid,
+      token_type: params.token_type,
+      contract_id: params.contract_id,
       auto_increment: false,
     });
 
@@ -193,11 +217,11 @@ class SimulationService {
     const kwhPerInterval = totalKwh / intervals;
     
     for (let i = 1; i <= intervals; i++) {
-      await this.updateMeterValue(session.session_id, kwhPerInterval * i);
+      await this.updateMeterValue(session.id, kwhPerInterval * i);
     }
 
     // Stop and generate CDR
-    const result = await this.stopCharging(session.session_id, {
+    const result = await this.stopCharging(session.id, {
       finalKwh: totalKwh,
       generateCDR: true,
     });
@@ -226,7 +250,7 @@ class SimulationService {
       const sessionsEndpoint = endpoints?.sessions;
       if (!sessionsEndpoint) continue;
 
-      const url = `${sessionsEndpoint}/${session.session_id}`;
+      const url = `${sessionsEndpoint}/${session.country_code}/${session.party_id}/${session.id}`;
       const startTime = Date.now();
       
       try {
@@ -250,7 +274,7 @@ class SimulationService {
           emspId: emsp.id,
           endpointType: 'sessions',
           objectType: 'session',
-          objectId: session.session_id,
+          objectId: session.id,
           method: 'PUT',
           url,
           requestHeaders: { 'Content-Type': 'application/json' },
@@ -265,7 +289,7 @@ class SimulationService {
           emspId: emsp.id,
           endpointType: 'sessions',
           objectType: 'session',
-          objectId: session.session_id,
+          objectId: session.id,
           method: 'PUT',
           url,
           requestBody: session,

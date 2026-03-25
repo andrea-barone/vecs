@@ -1,55 +1,81 @@
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../database/migrations';
 
+// OCPI 2.2.1 Types
+export type SessionStatus = 'ACTIVE' | 'COMPLETED' | 'INVALID' | 'PENDING' | 'RESERVATION';
+export type AuthMethod = 'AUTH_REQUEST' | 'COMMAND' | 'WHITELIST';
+export type TokenType = 'AD_HOC_USER' | 'APP_USER' | 'OTHER' | 'RFID';
+
+export interface CdrToken {
+  country_code: string;
+  party_id: string;
+  uid: string;
+  type: TokenType;
+  contract_id: string;
+}
+
+export interface Price {
+  excl_vat: number;
+  incl_vat?: number;
+}
+
+export interface CdrDimension {
+  type: 'CURRENT' | 'ENERGY' | 'ENERGY_EXPORT' | 'ENERGY_IMPORT' | 'MAX_CURRENT' | 'MIN_CURRENT' | 'MAX_POWER' | 'MIN_POWER' | 'PARKING_TIME' | 'POWER' | 'RESERVATION_TIME' | 'STATE_OF_CHARGE' | 'TIME';
+  volume: number;
+}
+
 export interface ChargingPeriod {
   start_date_time: Date;
-  dimensions: {
-    type: 'ENERGY' | 'FLAT' | 'PARKING_TIME' | 'TIME';
-    volume: number;
-  }[];
+  dimensions: CdrDimension[];
   tariff_id?: string;
 }
 
 export interface Session {
+  country_code: string;
+  party_id: string;
   id: string;
-  session_id: string;
   start_date_time: Date;
   end_date_time?: Date;
   kwh: number;
-  auth_id: string;
-  auth_method: 'AUTH_REQUEST' | 'WHITELIST' | 'COMMAND';
+  cdr_token: CdrToken;
+  auth_method: AuthMethod;
+  authorization_reference?: string;
   location_id: string;
   evse_uid: string;
   connector_id: string;
-  currency: string;
-  charging_periods: ChargingPeriod[];
-  total_cost?: number;
-  status: 'ACTIVE' | 'COMPLETED' | 'INVALID' | 'PENDING';
   meter_id?: string;
+  currency: string;
+  charging_periods?: ChargingPeriod[];
+  total_cost?: Price;
+  status: SessionStatus;
   last_updated: Date;
 }
 
 interface CreateSessionInput {
+  country_code?: string;
+  party_id?: string;
   location_id: string;
   evse_uid: string;
   connector_id: string;
-  auth_id: string;
-  auth_method?: string;
+  cdr_token: CdrToken;
+  auth_method?: AuthMethod;
+  authorization_reference?: string;
   currency?: string;
   meter_id?: string;
 }
 
 interface UpdateSessionInput {
   kwh?: number;
-  status?: string;
+  status?: SessionStatus;
   end_date_time?: Date;
-  total_cost?: number;
+  total_cost?: Price;
   charging_periods?: ChargingPeriod[];
+  authorization_reference?: string;
 }
 
 class SessionsService {
   /**
-   * Create a new charging session
+   * Create a new charging session (OCPI 2.2.1 compliant)
    */
   async createSession(input: CreateSessionInput): Promise<Session> {
     const sessionId = `VECS-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
@@ -68,7 +94,7 @@ class SessionsService {
     const evseResult = await pool.query(
       `SELECT e.id FROM evses e 
        JOIN locations l ON e.location_id = l.id 
-       WHERE e.evse_id = $1 AND l.location_id = $2`,
+       WHERE e.uid = $1 AND l.location_id = $2`,
       [input.evse_uid, input.location_id]
     );
     if (evseResult.rows.length === 0) {
@@ -93,19 +119,22 @@ class SessionsService {
 
     const result = await pool.query(
       `INSERT INTO sessions (
-        id, session_id, location_id, evse_id, connector_id,
-        auth_id, auth_method, start_date_time, currency, status,
+        id, country_code, party_id, session_id, location_id, evse_id, connector_id,
+        cdr_token, auth_method, authorization_reference, start_date_time, currency, status,
         kwh, meter_id, charging_periods, last_updated
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING *`,
       [
         dbId,
+        input.country_code || 'DE',
+        input.party_id || 'VEC',
         sessionId,
         locationResult.rows[0].id,
         evseResult.rows[0].id,
         connectorResult.rows[0].id,
-        input.auth_id,
+        JSON.stringify(input.cdr_token),
         input.auth_method || 'AUTH_REQUEST',
+        input.authorization_reference || null,
         now,
         input.currency || 'EUR',
         'ACTIVE',
@@ -129,7 +158,7 @@ class SessionsService {
     const result = await pool.query(
       `SELECT s.*, 
               l.location_id as loc_id, 
-              e.evse_id as evse_uid,
+              e.uid as evse_uid,
               c.connector_id as conn_id
        FROM sessions s
        JOIN locations l ON s.location_id = l.id
@@ -145,12 +174,36 @@ class SessionsService {
   }
 
   /**
+   * Get session by country_code, party_id, id (OCPI standard lookup)
+   */
+  async getSessionByOcpiId(countryCode: string, partyId: string, sessionId: string): Promise<Session | null> {
+    const result = await pool.query(
+      `SELECT s.*, 
+              l.location_id as loc_id, 
+              e.uid as evse_uid,
+              c.connector_id as conn_id
+       FROM sessions s
+       JOIN locations l ON s.location_id = l.id
+       JOIN evses e ON s.evse_id = e.id
+       JOIN connectors c ON s.connector_id = c.id
+       WHERE s.country_code = $1 AND s.party_id = $2 AND s.session_id = $3`,
+      [countryCode, partyId, sessionId]
+    );
+
+    if (result.rows.length === 0) return null;
+    const row = result.rows[0];
+    return this.rowToSession(row, row.loc_id, row.evse_uid, row.conn_id);
+  }
+
+  /**
    * List all sessions with optional filters
    */
   async listSessions(filters: {
-    status?: string;
+    status?: SessionStatus;
     location_id?: string;
-    auth_id?: string;
+    token_uid?: string;
+    country_code?: string;
+    party_id?: string;
     limit?: number;
     offset?: number;
   } = {}): Promise<{ sessions: Session[]; total: number }> {
@@ -166,9 +219,17 @@ class SessionsService {
       conditions.push(`l.location_id = $${paramIndex++}`);
       values.push(filters.location_id);
     }
-    if (filters.auth_id) {
-      conditions.push(`s.auth_id = $${paramIndex++}`);
-      values.push(filters.auth_id);
+    if (filters.token_uid) {
+      conditions.push(`s.cdr_token->>'uid' = $${paramIndex++}`);
+      values.push(filters.token_uid);
+    }
+    if (filters.country_code) {
+      conditions.push(`s.country_code = $${paramIndex++}`);
+      values.push(filters.country_code);
+    }
+    if (filters.party_id) {
+      conditions.push(`s.party_id = $${paramIndex++}`);
+      values.push(filters.party_id);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -187,7 +248,7 @@ class SessionsService {
     const result = await pool.query(
       `SELECT s.*, 
               l.location_id as loc_id,
-              e.evse_id as evse_uid,
+              e.uid as evse_uid,
               c.connector_id as conn_id
        FROM sessions s
        JOIN locations l ON s.location_id = l.id
@@ -228,11 +289,15 @@ class SessionsService {
     }
     if (input.total_cost !== undefined) {
       updates.push(`total_cost = $${paramIndex++}`);
-      values.push(input.total_cost);
+      values.push(JSON.stringify(input.total_cost));
     }
     if (input.charging_periods !== undefined) {
       updates.push(`charging_periods = $${paramIndex++}`);
       values.push(JSON.stringify(input.charging_periods));
+    }
+    if (input.authorization_reference !== undefined) {
+      updates.push(`authorization_reference = $${paramIndex++}`);
+      values.push(input.authorization_reference);
     }
 
     if (updates.length === 0) return null;
@@ -257,7 +322,7 @@ class SessionsService {
   /**
    * Stop a session and update EVSE status back to AVAILABLE
    */
-  async stopSession(sessionId: string, finalKwh: number, totalCost?: number): Promise<Session | null> {
+  async stopSession(sessionId: string, finalKwh: number, totalCost?: Price): Promise<Session | null> {
     const session = await this.getSession(sessionId);
     if (!session) return null;
 
@@ -286,7 +351,7 @@ class SessionsService {
         last_updated = $1
        WHERE session_id = $5
        RETURNING *`,
-      [now, finalKwh, totalCost || null, JSON.stringify(chargingPeriods), sessionId]
+      [now, finalKwh, totalCost ? JSON.stringify(totalCost) : null, JSON.stringify(chargingPeriods), sessionId]
     );
 
     if (result.rows.length === 0) return null;
@@ -294,36 +359,15 @@ class SessionsService {
     // Update EVSE status back to AVAILABLE
     await pool.query(
       `UPDATE evses SET status = 'AVAILABLE', last_updated = $1 
-       WHERE evse_id = $2`,
+       WHERE uid = $2`,
       [now, session.evse_uid]
     );
 
     return this.getSession(sessionId);
   }
 
-  private rowToSession(row: any, locationId: string, evseUid: string, connectorId: string): Session {
-    return {
-      id: row.session_id,
-      session_id: row.session_id,
-      start_date_time: row.start_date_time,
-      end_date_time: row.end_date_time,
-      kwh: parseFloat(row.kwh) || 0,
-      auth_id: row.auth_id,
-      auth_method: row.auth_method,
-      location_id: locationId,
-      evse_uid: evseUid,
-      connector_id: connectorId,
-      currency: row.currency,
-      charging_periods: this.parseJson(row.charging_periods) || [],
-      total_cost: row.total_cost ? parseFloat(row.total_cost) : undefined,
-      status: row.status,
-      meter_id: row.meter_id,
-      last_updated: row.last_updated,
-    };
-  }
-
   private parseJson(value: any): any {
-    if (!value) return null;
+    if (!value) return undefined;
     if (typeof value === 'string') {
       try {
         return JSON.parse(value);
@@ -332,6 +376,41 @@ class SessionsService {
       }
     }
     return value;
+  }
+
+  private rowToSession(row: any, locationId: string, evseUid: string, connectorId: string): Session {
+    // Handle legacy data: build cdr_token from auth_id if not present
+    let cdrToken = this.parseJson(row.cdr_token);
+    if (!cdrToken && row.auth_id) {
+      cdrToken = {
+        country_code: row.country_code || 'DE',
+        party_id: row.party_id || 'VEC',
+        uid: row.auth_id,
+        type: 'RFID',
+        contract_id: row.auth_id,
+      };
+    }
+
+    return {
+      country_code: row.country_code || 'DE',
+      party_id: row.party_id || 'VEC',
+      id: row.session_id,
+      start_date_time: row.start_date_time,
+      end_date_time: row.end_date_time || undefined,
+      kwh: parseFloat(row.kwh) || 0,
+      cdr_token: cdrToken,
+      auth_method: row.auth_method,
+      authorization_reference: row.authorization_reference || undefined,
+      location_id: locationId,
+      evse_uid: evseUid,
+      connector_id: connectorId,
+      meter_id: row.meter_id || undefined,
+      currency: row.currency,
+      charging_periods: this.parseJson(row.charging_periods) || [],
+      total_cost: this.parseJson(row.total_cost),
+      status: row.status,
+      last_updated: row.last_updated,
+    };
   }
 }
 

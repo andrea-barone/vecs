@@ -1,47 +1,67 @@
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../database/migrations';
 
+// OCPI 2.2.1 Token Types
+export type TokenType = 'AD_HOC_USER' | 'APP_USER' | 'OTHER' | 'RFID';
+export type WhitelistType = 'ALWAYS' | 'ALLOWED' | 'ALLOWED_OFFLINE' | 'NEVER';
+export type ProfileType = 'CHEAP' | 'FAST' | 'GREEN' | 'REGULAR';
+
+export interface EnergyContract {
+  supplier_name: string;
+  contract_id?: string;
+}
+
 export interface Token {
+  country_code: string;
+  party_id: string;
   uid: string;
-  type: 'RFID' | 'APP_USER' | 'AD_HOC_USER' | 'OTHER';
-  auth_id: string;
+  type: TokenType;
+  contract_id: string;
   visual_number?: string;
   issuer: string;
-  valid: boolean;
-  whitelist?: 'ALWAYS' | 'ALLOWED' | 'ALLOWED_OFFLINE' | 'NEVER';
-  language?: string;
   group_id?: string;
+  valid: boolean;
+  whitelist: WhitelistType;
+  language?: string;
+  default_profile_type?: ProfileType;
+  energy_contract?: EnergyContract;
   last_updated: Date;
 }
 
 interface CreateTokenInput {
+  country_code?: string;
+  party_id?: string;
   token_uid: string;
-  type: string;
-  auth_id: string;
+  type: TokenType;
+  contract_id: string;
   visual_number?: string;
   issuer: string;
-  valid?: boolean;
-  whitelist?: string;
-  language?: string;
   group_id?: string;
+  valid?: boolean;
+  whitelist?: WhitelistType;
+  language?: string;
+  default_profile_type?: ProfileType;
+  energy_contract?: EnergyContract;
   emsp_id?: string;
   company_id?: string;
 }
 
 interface UpdateTokenInput {
-  type?: string;
-  auth_id?: string;
+  type?: TokenType;
+  contract_id?: string;
   visual_number?: string;
   issuer?: string;
-  valid?: boolean;
-  whitelist?: string;
-  language?: string;
   group_id?: string;
+  valid?: boolean;
+  whitelist?: WhitelistType;
+  language?: string;
+  default_profile_type?: ProfileType;
+  energy_contract?: EnergyContract;
 }
 
 class TokensService {
   /**
-   * Create a new token
+   * Create a new token (OCPI 2.2.1 compliant)
    */
   async createToken(input: CreateTokenInput): Promise<Token> {
     const dbId = uuidv4();
@@ -49,20 +69,26 @@ class TokensService {
 
     const result = await pool.query(
       `INSERT INTO tokens (
-        id, token_uid, type, auth_id, visual_number, issuer,
-        valid, whitelist, language, emsp_id, company_id, last_updated
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        id, country_code, party_id, token_uid, type, contract_id,
+        visual_number, issuer, group_id, valid, whitelist, language,
+        default_profile_type, energy_contract, emsp_id, company_id, last_updated
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING *`,
       [
         dbId,
+        input.country_code || 'DE',
+        input.party_id || 'VEC',
         input.token_uid,
         input.type,
-        input.auth_id,
+        input.contract_id,
         input.visual_number || null,
         input.issuer,
+        input.group_id || null,
         input.valid !== false,
-        input.whitelist || 'ALWAYS',
+        input.whitelist || 'ALLOWED',
         input.language || null,
+        input.default_profile_type || null,
+        input.energy_contract ? JSON.stringify(input.energy_contract) : null,
         input.emsp_id || null,
         input.company_id || null,
         now,
@@ -86,13 +112,28 @@ class TokensService {
   }
 
   /**
+   * Get token by country_code, party_id, uid (OCPI standard lookup)
+   */
+  async getTokenByOcpiId(countryCode: string, partyId: string, tokenUid: string): Promise<Token | null> {
+    const result = await pool.query(
+      `SELECT * FROM tokens WHERE country_code = $1 AND party_id = $2 AND token_uid = $3`,
+      [countryCode, partyId, tokenUid]
+    );
+
+    if (result.rows.length === 0) return null;
+    return this.rowToToken(result.rows[0]);
+  }
+
+  /**
    * List all tokens with optional filters
    */
   async listTokens(filters: {
-    type?: string;
+    type?: TokenType;
     issuer?: string;
     valid?: boolean;
     emsp_id?: string;
+    country_code?: string;
+    party_id?: string;
     limit?: number;
     offset?: number;
   } = {}): Promise<{ tokens: Token[]; total: number }> {
@@ -115,6 +156,14 @@ class TokensService {
     if (filters.emsp_id) {
       conditions.push(`emsp_id = $${paramIndex++}`);
       values.push(filters.emsp_id);
+    }
+    if (filters.country_code) {
+      conditions.push(`country_code = $${paramIndex++}`);
+      values.push(filters.country_code);
+    }
+    if (filters.party_id) {
+      conditions.push(`party_id = $${paramIndex++}`);
+      values.push(filters.party_id);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -151,9 +200,9 @@ class TokensService {
       updates.push(`type = $${paramIndex++}`);
       values.push(input.type);
     }
-    if (input.auth_id !== undefined) {
-      updates.push(`auth_id = $${paramIndex++}`);
-      values.push(input.auth_id);
+    if (input.contract_id !== undefined) {
+      updates.push(`contract_id = $${paramIndex++}`);
+      values.push(input.contract_id);
     }
     if (input.visual_number !== undefined) {
       updates.push(`visual_number = $${paramIndex++}`);
@@ -162,6 +211,10 @@ class TokensService {
     if (input.issuer !== undefined) {
       updates.push(`issuer = $${paramIndex++}`);
       values.push(input.issuer);
+    }
+    if (input.group_id !== undefined) {
+      updates.push(`group_id = $${paramIndex++}`);
+      values.push(input.group_id);
     }
     if (input.valid !== undefined) {
       updates.push(`valid = $${paramIndex++}`);
@@ -174,6 +227,14 @@ class TokensService {
     if (input.language !== undefined) {
       updates.push(`language = $${paramIndex++}`);
       values.push(input.language);
+    }
+    if (input.default_profile_type !== undefined) {
+      updates.push(`default_profile_type = $${paramIndex++}`);
+      values.push(input.default_profile_type);
+    }
+    if (input.energy_contract !== undefined) {
+      updates.push(`energy_contract = $${paramIndex++}`);
+      values.push(JSON.stringify(input.energy_contract));
     }
 
     if (updates.length === 0) return null;
@@ -246,40 +307,49 @@ class TokensService {
   }
 
   /**
-   * Create sample tokens for testing
+   * Create sample tokens for testing (OCPI 2.2.1 compliant)
    */
   async createSampleTokens(): Promise<Token[]> {
     const sampleTokens: CreateTokenInput[] = [
       {
+        country_code: 'DE',
+        party_id: 'VEC',
         token_uid: 'RFID-001',
         type: 'RFID',
-        auth_id: 'AUTH-001',
+        contract_id: 'DE-VEC-C001',
         visual_number: '****1234',
         issuer: 'VECS Test',
         valid: true,
         whitelist: 'ALWAYS',
       },
       {
+        country_code: 'DE',
+        party_id: 'VEC',
         token_uid: 'RFID-002',
         type: 'RFID',
-        auth_id: 'AUTH-002',
+        contract_id: 'DE-VEC-C002',
         visual_number: '****5678',
         issuer: 'VECS Test',
         valid: true,
         whitelist: 'ALWAYS',
       },
       {
+        country_code: 'DE',
+        party_id: 'VEC',
         token_uid: 'APP-001',
         type: 'APP_USER',
-        auth_id: 'AUTH-APP-001',
+        contract_id: 'DE-VEC-A001',
         issuer: 'VECS Test App',
         valid: true,
-        whitelist: 'ALWAYS',
+        whitelist: 'ALLOWED',
+        default_profile_type: 'REGULAR',
       },
       {
+        country_code: 'DE',
+        party_id: 'VEC',
         token_uid: 'BLOCKED-001',
         type: 'RFID',
-        auth_id: 'AUTH-BLOCKED',
+        contract_id: 'DE-VEC-B001',
         issuer: 'VECS Test',
         valid: false, // Blocked token for testing
         whitelist: 'NEVER',
@@ -302,16 +372,33 @@ class TokensService {
     return created;
   }
 
+  private parseJson(value: any): any {
+    if (!value) return undefined;
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  }
+
   private rowToToken(row: any): Token {
     return {
+      country_code: row.country_code || 'DE',
+      party_id: row.party_id || 'VEC',
       uid: row.token_uid,
       type: row.type,
-      auth_id: row.auth_id,
-      visual_number: row.visual_number,
+      contract_id: row.contract_id || row.auth_id, // Fallback for migration
+      visual_number: row.visual_number || undefined,
       issuer: row.issuer,
+      group_id: row.group_id || undefined,
       valid: row.valid,
-      whitelist: row.whitelist,
-      language: row.language,
+      whitelist: row.whitelist || 'ALLOWED',
+      language: row.language || undefined,
+      default_profile_type: row.default_profile_type || undefined,
+      energy_contract: this.parseJson(row.energy_contract),
       last_updated: row.last_updated,
     };
   }

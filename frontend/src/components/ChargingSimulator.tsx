@@ -2,14 +2,23 @@ import { useState, useEffect } from 'react';
 
 interface Location {
   id: string;
-  evses: { evse_id: string; connectors: { id: string }[] }[];
+  evses: { uid: string; evse_id?: string; connectors: { id: string }[] }[];
+}
+
+interface CdrToken {
+  country_code: string;
+  party_id: string;
+  uid: string;
+  type: string;
+  contract_id: string;
 }
 
 interface Session {
-  session_id: string;
+  id: string;
   kwh: number;
   status: string;
   start_date_time: string;
+  cdr_token?: CdrToken;
 }
 
 interface Props {
@@ -25,7 +34,8 @@ export function ChargingSimulator({ apiBase, onSessionChanged }: Props) {
   const [locationId, setLocationId] = useState('');
   const [evseId, setEvseId] = useState('');
   const [connectorId, setConnectorId] = useState('');
-  const [authId, setAuthId] = useState('TEST-USER-001');
+  const [tokenUid, setTokenUid] = useState('RFID-001');
+  const [tokenType, setTokenType] = useState<'RFID' | 'APP_USER' | 'AD_HOC_USER' | 'OTHER'>('RFID');
   const [powerKw, setPowerKw] = useState('50');
 
   const [activeSession, setActiveSession] = useState<Session | null>(null);
@@ -45,7 +55,7 @@ export function ChargingSimulator({ apiBase, onSessionChanged }: Props) {
         if (locs.length > 0) {
           setLocationId(locs[0].id);
           if (locs[0].evses?.length) {
-            setEvseId(locs[0].evses[0].evse_id);
+            setEvseId(locs[0].evses[0].uid || locs[0].evses[0].evse_id);
             if (locs[0].evses[0].connectors?.length) {
               setConnectorId(locs[0].evses[0].connectors[0].id);
             }
@@ -58,10 +68,10 @@ export function ChargingSimulator({ apiBase, onSessionChanged }: Props) {
   };
 
   const selectedLocation = locations.find(l => l.id === locationId);
-  const selectedEvse = selectedLocation?.evses?.find(e => e.evse_id === evseId);
+  const selectedEvse = selectedLocation?.evses?.find(e => (e.uid || e.evse_id) === evseId);
 
   const handleStart = async () => {
-    if (!locationId || !evseId || !connectorId || !authId) {
+    if (!locationId || !evseId || !connectorId || !tokenUid) {
       setError('Please fill all fields');
       return;
     }
@@ -77,7 +87,8 @@ export function ChargingSimulator({ apiBase, onSessionChanged }: Props) {
           location_id: locationId,
           evse_id: evseId,
           connector_id: connectorId,
-          auth_id: authId,
+          token_uid: tokenUid,
+          token_type: tokenType,
           power_kw: parseFloat(powerKw),
           auto_increment: false,
         }),
@@ -103,7 +114,7 @@ export function ChargingSimulator({ apiBase, onSessionChanged }: Props) {
       const res = await fetch(`${apiBase}/admin/simulate/meter-update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: activeSession.session_id, kwh: parseFloat(meterKwh) }),
+        body: JSON.stringify({ session_id: activeSession.id, kwh: parseFloat(meterKwh) }),
       });
       const data = await res.json();
       if (data.error) setError(data.error);
@@ -123,7 +134,7 @@ export function ChargingSimulator({ apiBase, onSessionChanged }: Props) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          session_id: activeSession.session_id,
+          session_id: activeSession.id,
           final_kwh: parseFloat(meterKwh),
           generate_cdr: true,
           price_per_kwh: 0.35,
@@ -159,7 +170,7 @@ export function ChargingSimulator({ apiBase, onSessionChanged }: Props) {
                 setLocationId(e.target.value);
                 const loc = locations.find(l => l.id === e.target.value);
                 if (loc?.evses?.length) {
-                  setEvseId(loc.evses[0].evse_id);
+                  setEvseId(loc.evses[0].uid || loc.evses[0].evse_id || '');
                   if (loc.evses[0].connectors?.length) setConnectorId(loc.evses[0].connectors[0].id);
                 }
               }}>
@@ -170,10 +181,14 @@ export function ChargingSimulator({ apiBase, onSessionChanged }: Props) {
               <label>EVSE</label>
               <select value={evseId} onChange={e => {
                 setEvseId(e.target.value);
-                const evse = selectedLocation?.evses?.find(ev => ev.evse_id === e.target.value);
+                const evse = selectedLocation?.evses?.find(ev => (ev.uid || ev.evse_id) === e.target.value);
                 if (evse?.connectors?.length) setConnectorId(evse.connectors[0].id);
               }}>
-                {selectedLocation?.evses?.map(evse => <option key={evse.evse_id} value={evse.evse_id}>{evse.evse_id}</option>)}
+                {selectedLocation?.evses?.map(evse => (
+                  <option key={evse.uid || evse.evse_id} value={evse.uid || evse.evse_id}>
+                    {evse.uid || evse.evse_id}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="form-group">
@@ -186,8 +201,17 @@ export function ChargingSimulator({ apiBase, onSessionChanged }: Props) {
 
           <div className="form-row">
             <div className="form-group">
-              <label>Auth ID</label>
-              <input value={authId} onChange={e => setAuthId(e.target.value)} placeholder="TEST-USER-001" />
+              <label>Token UID</label>
+              <input value={tokenUid} onChange={e => setTokenUid(e.target.value)} placeholder="RFID-001" />
+            </div>
+            <div className="form-group">
+              <label>Token Type</label>
+              <select value={tokenType} onChange={e => setTokenType(e.target.value as any)}>
+                <option value="RFID">RFID</option>
+                <option value="APP_USER">APP_USER</option>
+                <option value="AD_HOC_USER">AD_HOC_USER</option>
+                <option value="OTHER">OTHER</option>
+              </select>
             </div>
             <div className="form-group">
               <label>Power (kW)</label>
@@ -207,9 +231,15 @@ export function ChargingSimulator({ apiBase, onSessionChanged }: Props) {
         <div className="active-session">
           <div className="session-card-large">
             <div className="session-header">
-              <span className="mono">{activeSession.session_id}</span>
+              <span className="mono">{activeSession.id}</span>
               <span className="status-badge status-charging">ACTIVE</span>
             </div>
+
+            {activeSession.cdr_token && (
+              <div className="token-info" style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                Token: {activeSession.cdr_token.uid} ({activeSession.cdr_token.type})
+              </div>
+            )}
 
             <div className="stats-row">
               <div className="stat-card">

@@ -23,15 +23,18 @@ export interface CommandResult {
   message?: string;
 }
 
+// OCPI 2.2.1 Token object in commands
+export interface CommandToken {
+  country_code: string;
+  party_id: string;
+  uid: string;
+  type: 'AD_HOC_USER' | 'APP_USER' | 'OTHER' | 'RFID';
+  contract_id: string;
+}
+
 export interface StartSessionCommand {
   response_url: string;
-  token: {
-    uid: string;
-    type: string;
-    auth_id: string;
-    issuer: string;
-    valid: boolean;
-  };
+  token: CommandToken;
   location_id: string;
   evse_uid?: string;
   connector_id?: string;
@@ -52,13 +55,7 @@ export interface UnlockConnectorCommand {
 
 export interface ReserveNowCommand {
   response_url: string;
-  token: {
-    uid: string;
-    type: string;
-    auth_id: string;
-    issuer: string;
-    valid: boolean;
-  };
+  token: CommandToken;
   expiry_date: string;
   reservation_id: string;
   location_id: string;
@@ -82,7 +79,7 @@ const commandResponses: Map<string, {
 
 class CommandsService {
   /**
-   * Handle START_SESSION command
+   * Handle START_SESSION command (OCPI 2.2.1 compliant)
    */
   async handleStartSession(command: StartSessionCommand): Promise<CommandResult> {
     const commandId = uuidv4();
@@ -117,7 +114,7 @@ class CommandsService {
 
       if (!evseUid) {
         const evseResult = await pool.query(
-          `SELECT e.evse_id, c.connector_id 
+          `SELECT e.uid, c.connector_id 
            FROM evses e 
            JOIN connectors c ON c.evse_id = e.id
            WHERE e.location_id = $1 AND e.status = 'AVAILABLE'
@@ -132,7 +129,7 @@ class CommandsService {
           };
         }
 
-        evseUid = evseResult.rows[0].evse_id;
+        evseUid = evseResult.rows[0].uid;
         connectorId = evseResult.rows[0].connector_id;
       }
 
@@ -140,33 +137,38 @@ class CommandsService {
         connectorId = '1'; // Default connector
       }
 
-      // Start the charging session
+      // Start the charging session with OCPI 2.2.1 compliant token
       const session = await simulationService.startCharging({
         location_id: command.location_id,
         evse_id: evseUid!,
         connector_id: connectorId!,
-        auth_id: command.token.auth_id,
+        token_uid: command.token.uid,
+        token_type: command.token.type,
+        contract_id: command.token.contract_id,
+        token_country_code: command.token.country_code,
+        token_party_id: command.token.party_id,
         auth_method: 'COMMAND',
+        authorization_reference: command.authorization_reference,
       });
 
       // Store the command result
       commandResponses.set(commandId, {
         command_type: 'START_SESSION',
         result: 'ACCEPTED',
-        session_id: session.session_id,
+        session_id: session.id,
         created_at: new Date(),
       });
 
       // Send async response to response_url
       this.sendCommandResponse(command.response_url, {
         result: 'ACCEPTED',
-        message: `Session ${session.session_id} started`,
+        message: `Session ${session.id} started`,
       });
 
       return {
         result: 'ACCEPTED',
         timeout: 30,
-        message: `Session ${session.session_id} starting`,
+        message: `Session ${session.id} starting`,
       };
 
     } catch (err: any) {
@@ -226,7 +228,7 @@ class CommandsService {
       `SELECT c.id FROM connectors c
        JOIN evses e ON c.evse_id = e.id
        JOIN locations l ON e.location_id = l.id
-       WHERE l.location_id = $1 AND e.evse_id = $2 AND c.connector_id = $3`,
+       WHERE l.location_id = $1 AND e.uid = $2 AND c.connector_id = $3`,
       [command.location_id, command.evse_uid, command.connector_id]
     );
 

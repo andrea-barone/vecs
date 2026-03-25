@@ -266,63 +266,123 @@ export const runMigrations = async () => {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS sessions (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        country_code VARCHAR(2) NOT NULL DEFAULT 'DE',
+        party_id VARCHAR(3) NOT NULL DEFAULT 'VEC',
         session_id VARCHAR(255) NOT NULL UNIQUE,
         location_id UUID NOT NULL REFERENCES locations(id),
         evse_id UUID NOT NULL REFERENCES evses(id),
         connector_id UUID NOT NULL REFERENCES connectors(id),
-        auth_id VARCHAR(255) NOT NULL,
+        cdr_token JSONB,
         auth_method VARCHAR(50) NOT NULL,
+        authorization_reference VARCHAR(255),
         start_date_time TIMESTAMP NOT NULL,
         end_date_time TIMESTAMP,
         kwh DECIMAL(10, 3) DEFAULT 0,
         currency VARCHAR(3) NOT NULL DEFAULT 'EUR',
+        total_cost JSONB,
         status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
         last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
+    // Add missing session columns (OCPI 2.2.1 compliance)
+    await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS country_code VARCHAR(2) DEFAULT 'DE'`).catch(() => {});
+    await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS party_id VARCHAR(3) DEFAULT 'VEC'`).catch(() => {});
+    await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS cdr_token JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS authorization_reference VARCHAR(255)`).catch(() => {});
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS cdrs (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        country_code VARCHAR(2) NOT NULL DEFAULT 'DE',
+        party_id VARCHAR(3) NOT NULL DEFAULT 'VEC',
         cdr_id VARCHAR(255) NOT NULL UNIQUE,
         session_id UUID REFERENCES sessions(id),
-        location_id UUID NOT NULL REFERENCES locations(id),
-        evse_id UUID NOT NULL REFERENCES evses(id),
-        connector_id UUID NOT NULL REFERENCES connectors(id),
-        auth_id VARCHAR(255) NOT NULL,
+        cdr_token JSONB NOT NULL,
         auth_method VARCHAR(50) NOT NULL,
+        authorization_reference VARCHAR(255),
+        cdr_location JSONB NOT NULL,
+        meter_id VARCHAR(255),
+        currency VARCHAR(3) NOT NULL DEFAULT 'EUR',
+        tariffs JSONB DEFAULT '[]',
+        charging_periods JSONB DEFAULT '[]',
+        signed_data JSONB,
+        total_cost JSONB NOT NULL,
+        total_fixed_cost JSONB,
+        total_energy DECIMAL(10, 3) NOT NULL,
+        total_energy_cost JSONB,
+        total_time DECIMAL(10, 4) NOT NULL,
+        total_time_cost JSONB,
+        total_parking_time DECIMAL(10, 4),
+        total_parking_cost JSONB,
+        total_reservation_cost JSONB,
+        remark TEXT,
+        invoice_reference_id VARCHAR(255),
+        credit BOOLEAN DEFAULT FALSE,
+        credit_reference_id VARCHAR(255),
+        home_charging_compensation BOOLEAN,
         start_date_time TIMESTAMP NOT NULL,
         end_date_time TIMESTAMP NOT NULL,
-        currency VARCHAR(3) NOT NULL DEFAULT 'EUR',
-        total_energy DECIMAL(10, 3) NOT NULL,
-        total_time INTEGER NOT NULL,
-        total_parking_time INTEGER,
-        total_cost_excl_vat DECIMAL(10, 2),
-        total_cost_incl_vat DECIMAL(10, 2),
-        credit BOOLEAN DEFAULT FALSE,
         last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
+    // Add missing CDR columns (OCPI 2.2.1 compliance)
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS country_code VARCHAR(2) DEFAULT 'DE'`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS party_id VARCHAR(3) DEFAULT 'VEC'`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS cdr_token JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS authorization_reference VARCHAR(255)`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS cdr_location JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS meter_id VARCHAR(255)`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS total_cost JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS total_fixed_cost JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS total_energy_cost JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS total_time_cost JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS total_parking_cost JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS total_reservation_cost JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS invoice_reference_id VARCHAR(255)`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS credit_reference_id VARCHAR(255)`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS home_charging_compensation BOOLEAN`).catch(() => {});
+    // Drop old columns that were replaced
+    await pool.query(`ALTER TABLE cdrs DROP COLUMN IF EXISTS location_id`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs DROP COLUMN IF EXISTS evse_id`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs DROP COLUMN IF EXISTS connector_id`).catch(() => {});
+    await pool.query(`ALTER TABLE cdrs DROP COLUMN IF EXISTS auth_id`).catch(() => {});
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS tokens (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        country_code VARCHAR(2) NOT NULL DEFAULT 'DE',
+        party_id VARCHAR(3) NOT NULL DEFAULT 'VEC',
         token_uid VARCHAR(255) NOT NULL UNIQUE,
         type VARCHAR(50) NOT NULL,
-        auth_id VARCHAR(255) NOT NULL,
+        contract_id VARCHAR(255) NOT NULL,
         visual_number VARCHAR(255),
         issuer VARCHAR(255) NOT NULL,
+        group_id VARCHAR(255),
         valid BOOLEAN DEFAULT TRUE,
-        whitelist VARCHAR(50),
-        language VARCHAR(5),
+        whitelist VARCHAR(50) NOT NULL DEFAULT 'ALLOWED',
+        language VARCHAR(2),
+        default_profile_type VARCHAR(20),
+        energy_contract JSONB,
         company_id UUID,
         emsp_id UUID,
         last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Add missing token columns (OCPI 2.2.1 compliance)
+    await pool.query(`ALTER TABLE tokens ADD COLUMN IF NOT EXISTS country_code VARCHAR(2) DEFAULT 'DE'`).catch(() => {});
+    await pool.query(`ALTER TABLE tokens ADD COLUMN IF NOT EXISTS party_id VARCHAR(3) DEFAULT 'VEC'`).catch(() => {});
+    await pool.query(`ALTER TABLE tokens ADD COLUMN IF NOT EXISTS contract_id VARCHAR(255)`).catch(() => {});
+    await pool.query(`ALTER TABLE tokens ADD COLUMN IF NOT EXISTS group_id VARCHAR(255)`).catch(() => {});
+    await pool.query(`ALTER TABLE tokens ADD COLUMN IF NOT EXISTS default_profile_type VARCHAR(20)`).catch(() => {});
+    await pool.query(`ALTER TABLE tokens ADD COLUMN IF NOT EXISTS energy_contract JSONB`).catch(() => {});
+    // Migrate auth_id to contract_id if contract_id is null
+    await pool.query(`UPDATE tokens SET contract_id = auth_id WHERE contract_id IS NULL`).catch(() => {});
 
     // Add company_id to existing tables if missing
     await pool.query(`ALTER TABLE locations ADD COLUMN IF NOT EXISTS company_id UUID`).catch(() => {});
